@@ -44,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -211,14 +212,15 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxSize()
         ) {
             item {
-                val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+                val isDark = androidx.compose.foundation.isSystemInDarkTheme()
                 ExpressiveSettingsGroup {
                     val mainCategories = SettingsCategory.entries.filter {
                         it != SettingsCategory.ABOUT && 
-                        it != SettingsCategory.DEVICE_CAPABILITIES
+                        it != SettingsCategory.DEVICE_CAPABILITIES &&
+                        it != SettingsCategory.LIBRARY
                     }
 
-                    val totalItems = mainCategories.size + 3 // Device + Accounts + About
+                    val totalItems = mainCategories.size + 4 // Account + Device + Accounts + About
                     fun shapeFor(index: Int) =
                         when {
                             totalItems == 1 -> RoundedCornerShape(24.dp)
@@ -228,6 +230,18 @@ fun SettingsScreen(
                         }
 
                     var itemIndex = 0
+
+                    ExpressiveCategoryItem(
+                        category = null,
+                        title = "Account",
+                        subtitle = "Manage your Deezer account",
+                        icon = Icons.Rounded.AccountCircle,
+                        customColors = getCategoryColors(SettingsCategory.APPEARANCE, isDark),
+                        onClick = { navController.navigateSafely(Screen.Accounts.route) },
+                        shape = shapeFor(itemIndex)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    itemIndex++
 
                     mainCategories.forEach { category ->
                         val colors = getCategoryColors(category, isDark)
@@ -261,18 +275,7 @@ fun SettingsScreen(
                     }
                     itemIndex++
 
-                    ExpressiveNavigationItem(
-                        title = stringResource(R.string.settings_accounts_row_title),
-                        subtitle = stringResource(R.string.settings_accounts_row_subtitle),
-                        icon = Icons.Rounded.AccountCircle,
-                        colors = getAccountsColors(isDark),
-                        onClick = { navController.navigateSafely(Screen.Accounts.route) },
-                        shape = shapeFor(itemIndex)
-                    )
-                    if (itemIndex < totalItems - 1) {
-                        Spacer(modifier = Modifier.height(2.dp))
-                    }
-                    itemIndex++
+
 
                     ExpressiveCategoryItem(
                         category = SettingsCategory.ABOUT,
@@ -374,7 +377,10 @@ fun ExpressiveNavigationItem(
 
 @Composable
 fun ExpressiveCategoryItem(
-    category: SettingsCategory,
+    category: SettingsCategory?,
+    title: String? = null,
+    subtitle: String? = null,
+    icon: ImageVector? = null,
     onClick: () -> Unit,
     shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(24.dp),
     customColors: Pair<Color, Color>? = null
@@ -397,14 +403,21 @@ fun ExpressiveCategoryItem(
                     .clip(CircleShape)
                     .background(customColors?.first ?: MaterialTheme.colorScheme.primaryContainer)
             ) {
-                if (category.icon != null) {
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = customColors?.second ?: MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(24.dp)
+                    )
+                } else if (category?.icon != null) {
                     Icon(
                         imageVector = category.icon,
                         contentDescription = null,
                         tint = customColors?.second ?: MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.size(24.dp)
                     )
-                } else if (category.iconRes != null) {
+                } else if (category?.iconRes != null) {
                     Icon(
                         painter = painterResource(id = category.iconRes),
                         contentDescription = null,
@@ -418,7 +431,7 @@ fun ExpressiveCategoryItem(
             
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(category.titleRes),
+                    text = title ?: category?.titleRes?.let { stringResource(it) } ?: "",
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
@@ -426,7 +439,7 @@ fun ExpressiveCategoryItem(
                     maxLines = 1
                 )
                 Text(
-                    text = stringResource(category.subtitleRes),
+                    text = subtitle ?: category?.subtitleRes?.let { stringResource(it) } ?: "",
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
@@ -482,8 +495,7 @@ private fun getCategoryColors(category: SettingsCategory, isDark: Boolean): Pair
             SettingsCategory.APPEARANCE -> Color(0xFF7D5260) to Color(0xFFFFD8E4) 
             SettingsCategory.PLAYBACK -> Color(0xFF633B48) to Color(0xFFFFD8EC) 
             SettingsCategory.BEHAVIOR -> Color(0xFF3E4C63) to Color(0xFFD7E3FF)
-            SettingsCategory.BACKUP_RESTORE -> Color(0xFF3B4869) to Color(0xFFD9E2FF)
-            SettingsCategory.DEVELOPER -> Color(0xFF324F34) to Color(0xFFCBEFD0) 
+            SettingsCategory.DEVELOPER -> Color(0xFFE2D4A3) to Color(0xFF675624) 
             SettingsCategory.EQUALIZER -> Color(0xFF6E4E13) to Color(0xFFFFDEAC) 
             SettingsCategory.DEVICE_CAPABILITIES -> Color(0xFF004D61) to Color(0xFFACEFEE) // Custom teal/cyan mix
             SettingsCategory.ABOUT -> Color(0xFF3F474D) to Color(0xFFDEE3EB) 
@@ -494,8 +506,7 @@ private fun getCategoryColors(category: SettingsCategory, isDark: Boolean): Pair
             SettingsCategory.APPEARANCE -> Color(0xFFFFD8E4) to Color(0xFF631835)
             SettingsCategory.PLAYBACK -> Color(0xFFFFD8EC) to Color(0xFF631B4B)
             SettingsCategory.BEHAVIOR -> Color(0xFFD7E3FF) to Color(0xFF253347)
-            SettingsCategory.BACKUP_RESTORE -> Color(0xFFD9E2FF) to Color(0xFF27304E)
-            SettingsCategory.DEVELOPER -> Color(0xFFCBEFD0) to Color(0xFF042106)
+            SettingsCategory.DEVELOPER -> Color(0xFF675624) to Color(0xFFFBE1A2)
             SettingsCategory.EQUALIZER -> Color(0xFFFFDEAC) to Color(0xFF281900)
             SettingsCategory.DEVICE_CAPABILITIES -> Color(0xFFACEFEE) to Color(0xFF002022)
             SettingsCategory.ABOUT -> Color(0xFFEFF1F7) to Color(0xFF44474F)

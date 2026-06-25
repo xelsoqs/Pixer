@@ -165,12 +165,11 @@ import com.lostf1sh.pixelplayeross.presentation.viewmodel.StablePlayerState
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.PlaylistUiState
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.PlaylistViewModel
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.SongInfoBottomSheetViewModel
+import com.lostf1sh.pixelplayeross.presentation.screens.search.components.GenreTypography
 import com.lostf1sh.pixelplayeross.data.model.LibraryTabId
 import com.lostf1sh.pixelplayeross.data.model.toLibraryTabIdOrNull
 import com.lostf1sh.pixelplayeross.data.preferences.LibraryNavigationMode
-import com.lostf1sh.pixelplayeross.data.worker.SyncProgress
-import com.lostf1sh.pixelplayeross.presentation.screens.search.components.GenreTypography
-import com.lostf1sh.pixelplayeross.presentation.components.SyncProgressBar
+
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.LibraryViewModel
 import com.lostf1sh.pixelplayeross.utils.formatSongCount
 import androidx.paging.compose.collectAsLazyPagingItems
@@ -312,22 +311,12 @@ fun LibraryScreen(
     songInfoBottomSheetViewModel: SongInfoBottomSheetViewModel = hiltViewModel()
 ) {
     // High-level state collection is kept minimal.
-    val context = LocalContext.current // Added context
+    val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val lastTabIndex by playerViewModel.lastLibraryTabIndexFlow.collectAsStateWithLifecycle()
-    val favoriteIds by playerViewModel.favoriteSongIds.collectAsStateWithLifecycle() // Reintroduce favoriteIds here
-    val scope = rememberCoroutineScope() // Keep if used for UI actions
-    val syncManager = playerViewModel.syncManager
+    val favoriteIds by playerViewModel.favoriteSongIds.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
     var isRefreshing by remember { mutableStateOf(false) }
-    // The pull-to-refresh spinner is reserved for user gestures. Automatic sync
-    // and long-running refresh work move through the slim linear indicator under
-    // LibraryActionRow so the list stays put.
-    val isFetchingChanges by syncManager.isFetchingChanges
-        .collectAsStateWithLifecycle(initialValue = false)
-    val isSyncing by syncManager.isSyncing
-        .collectAsStateWithLifecycle(initialValue = false)
-    // NOTE: syncProgress is NOT collected here. It is collected inside LibrarySyncOverlay
-    // to avoid triggering recomposition of the entire LibraryScreen on every progress tick.
 
     var showSongInfoBottomSheet by remember { mutableStateOf(false) }
     var showPlaylistBottomSheet by remember { mutableStateOf(false) }
@@ -396,9 +385,9 @@ fun LibraryScreen(
 
     // Multi-selection callbacks
     val onSongLongPress: (Song) -> Unit = remember(multiSelectionState, haptic) {
-        { song -> 
+        { song ->
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            multiSelectionState.toggleSelection(song) 
+            multiSelectionState.toggleSelection(song)
         }
     }
 
@@ -420,9 +409,9 @@ fun LibraryScreen(
     }
 
     val onAlbumLongPress: (Album) -> Unit = remember(toggleAlbumSelection, haptic) {
-        { album -> 
+        { album ->
             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-            toggleAlbumSelection(album) 
+            toggleAlbumSelection(album)
         }
     }
 
@@ -466,81 +455,18 @@ fun LibraryScreen(
         }
     }
     // Pull-to-refresh uses incremental sync for speed. The spinner gives manual
-    // refreshes a short tactile confirmation, then longer work hands off to the
-    // inline sync indicator.
+    // refreshes a short tactile confirmation.
     var isMinDelayActive by remember { mutableStateOf(false) }
-    var refreshGeneration by remember { mutableStateOf(0) }
-
-    val onRefresh: () -> Unit = remember(scope, syncManager) {
+    val onRefresh: () -> Unit = remember(scope) {
         {
-            val currentRefreshGeneration = refreshGeneration + 1
-            refreshGeneration = currentRefreshGeneration
-            isMinDelayActive = true
             isRefreshing = true
-            syncManager.incrementalSync()
             scope.launch {
                 kotlinx.coroutines.delay(PULL_REFRESH_MIN_VISIBLE_MS)
-                if (currentRefreshGeneration != refreshGeneration) return@launch
-                isMinDelayActive = false
-                // If the changes phase already finished while the tactile minimum was
-                // still active, hide the spinner now.
-                val stillFetching = syncManager.isFetchingChanges.first()
-                if (!stillFetching) {
-                    isRefreshing = false
-                    return@launch
-                }
-
-                val remainingVisibleMs =
-                    (PULL_REFRESH_MAX_VISIBLE_MS - PULL_REFRESH_MIN_VISIBLE_MS)
-                        .coerceAtLeast(0L)
-                if (remainingVisibleMs > 0L) {
-                    kotlinx.coroutines.delay(remainingVisibleMs)
-                }
-                if (currentRefreshGeneration != refreshGeneration) return@launch
-                // Long-running refresh work continues through the inline indicator.
                 isRefreshing = false
             }
         }
     }
 
-    LaunchedEffect(isFetchingChanges) {
-        if (!isFetchingChanges && !isMinDelayActive) {
-            isRefreshing = false
-        }
-    }
-
-    // Minimum-visible gate for the inline sync indicator. It covers automatic
-    // startup syncs and manual refreshes once the pull spinner has handed off.
-    // Fast no-op phases finish in tens of milliseconds, so the small linear bar is
-    // held briefly to avoid single-frame flicker.
-    var inlineSyncVisible by remember { mutableStateOf(false) }
-    var inlineSyncShownAt by remember { mutableStateOf<Long?>(null) }
-    LaunchedEffect(isSyncing, isRefreshing) {
-        if (isSyncing && !isRefreshing) {
-            if (!inlineSyncVisible) {
-                inlineSyncShownAt = System.currentTimeMillis()
-                inlineSyncVisible = true
-            }
-        } else if (isRefreshing) {
-            inlineSyncVisible = false
-            inlineSyncShownAt = null
-        } else if (inlineSyncVisible) {
-            val shownAt = inlineSyncShownAt
-            val elapsed = if (shownAt != null) {
-                System.currentTimeMillis() - shownAt
-            } else {
-                INLINE_SYNC_MIN_VISIBLE_MS
-            }
-            val remaining = INLINE_SYNC_MIN_VISIBLE_MS - elapsed
-            if (remaining > 0) {
-                kotlinx.coroutines.delay(remaining)
-            }
-            // If sync flipped back to visible during the delay this LaunchedEffect
-            // is cancelled and re-runs, so reaching this line means we should hide.
-            inlineSyncVisible = false
-            inlineSyncShownAt = null
-        }
-    }
 
     // P1-1: derivedStateOf ensures BackHandler only recomposes when the boolean RESULT changes,
     // not every time any individual selection state emits.
@@ -1030,14 +956,6 @@ fun LibraryScreen(
                             }
                         }
 
-                        // Slim inline sync indicator. Automatic startup syncs use this
-                        // instead of pulling the list down, and manual refreshes hand off
-                        // to it when the worker takes longer than the pull gesture window.
-                        LibraryInlineSyncIndicator(
-                            visible = inlineSyncVisible && !isLibraryContentEmpty,
-                            syncManager = syncManager
-                        )
-
                         if (isSortSheetVisible && sanitizedSortOptions.isNotEmpty()) {
                             val currentSelectionKey = currentSelectedSortOption?.storageKey
                             val selectedOptionForSheet = sanitizedSortOptions.firstOrNull { option ->
@@ -1201,30 +1119,31 @@ fun LibraryScreen(
                                     compactMode = isCompactNavigation
                                 )
                                 when (tabTitles.getOrNull(tabIndex)?.toLibraryTabIdOrNull()) {
-                                    LibraryTabId.SONGS -> {
-                                        LibrarySongsTab(
-                                            songs = allSongsLazyPagingItems,
-                                            isLoading = isLibraryLoading,
-                                            playerViewModel = playerViewModel,
-                                            bottomBarHeight = bottomBarHeightDp,
-                                            onMoreOptionsClick = stableOnMoreOptionsClick,
-                                            isRefreshing = isRefreshing,
-                                            onRefresh = {
-                                                onRefresh()
-                                                allSongsLazyPagingItems.refresh()
-                                            },
-                                            isSelectionMode = isSelectionMode,
-                                            selectedSongIds = selectedSongIds,
-                                            onSongLongPress = onSongLongPress,
-                                            onSongSelectionToggle = onSongSelectionToggle,
-                                            getSelectionIndex = playerViewModel.multiSelectionStateHolder::getSelectionIndex,
-                                            onLocateCurrentSongVisibilityChanged = { songsShowLocateButton = it },
-                                            onRegisterLocateCurrentSongAction = { songsLocateAction = it },
-                                            sortOption = playerUiState.currentSongSortOption,
-                                            storageFilter = playerUiState.currentStorageFilter,
-                                            hasCurrentSong = hasCurrentSong
-                                        )
-                                    }
+                                LibraryTabId.SONGS -> {
+                                                                        LibrarySongsTab(
+                                                                            songs = allSongsLazyPagingItems,
+                                                                            isLoading = isLibraryLoading,
+                                                                            playerViewModel = playerViewModel,
+                                                                            bottomBarHeight = bottomBarHeightDp,
+                                                                            onMoreOptionsClick = stableOnMoreOptionsClick,
+                                                                            isRefreshing = isRefreshing,
+                                                                            onRefresh = {
+                                                                                onRefresh()
+                                                                                allSongsLazyPagingItems.refresh()
+                                                                            },
+                                                                            isSelectionMode = isSelectionMode,
+                                                                            selectedSongIds = selectedSongIds,
+                                                                            onSongLongPress = onSongLongPress,
+                                                                            onSongSelectionToggle = onSongSelectionToggle,
+                                                                            getSelectionIndex = playerViewModel.multiSelectionStateHolder::getSelectionIndex,
+                                                                            onLocateCurrentSongVisibilityChanged = { songsShowLocateButton = it },
+                                                                            onRegisterLocateCurrentSongAction = { songsLocateAction = it },
+                                                                            sortOption = playerUiState.currentSongSortOption,
+                                                                            storageFilter = playerUiState.currentStorageFilter,
+                                                                            hasCurrentSong = hasCurrentSong
+                                                                        )
+                                                                    }
+
                                     LibraryTabId.ALBUMS -> {
                                         val isLoading = playerUiState.isLoadingLibraryCategories
 
@@ -1318,59 +1237,59 @@ fun LibraryScreen(
                                         )
                                     }
 
+
+
                                     LibraryTabId.FOLDERS -> {
-                                        val folders = playerUiState.musicFolders
-                                        val currentFolder = playerUiState.currentFolder
-                                        val isLoading = playerUiState.isLoadingLibraryCategories
-                                        val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
-                                        val defaultFolderName = stringResource(R.string.presentation_batch_d_folder_name_fallback)
-
-                                        LibraryFoldersTab(
-                                            folders = folders,
-                                            currentFolder = currentFolder,
-                                            isLoading = isLoading,
-                                            bottomBarHeight = bottomBarHeightDp,
-                                            stablePlayerState = stablePlayerState,
-                                            onNavigateBack = { playerViewModel.navigateBackFolder() },
-                                            onFolderClick = { folderPath -> playerViewModel.navigateToFolder(folderPath) },
-                                            onFolderAsPlaylistClick = { folder ->
-                                                val encodedPath = Uri.encode(folder.path)
-                                                navController.navigateSafelyReplacing(
-                                                    route = Screen.PlaylistDetail.createRoute(
-                                                        "${PlaylistViewModel.FOLDER_PLAYLIST_PREFIX}$encodedPath"
-                                                    ),
-                                                    patternToPop = Screen.PlaylistDetail.route
-                                                )
-                                            },
-                                            onPlaySong = { song, queue ->
-                                                playerViewModel.showAndPlaySong(
-                                                    song,
-                                                    queue,
-                                                    currentFolder?.name ?: defaultFolderName
-                                                )
-                                            },
-                                            onMoreOptionsClick = stableOnMoreOptionsClick,
-                                            isPlaylistView = playerUiState.isFoldersPlaylistView,
-                                            currentSortOption = playerUiState.currentFolderSortOption,
-                                            isRefreshing = isRefreshing,
-                                            onRefresh = onRefresh,
-                                            isSelectionMode = isSelectionMode,
-                                            selectedSongIds = selectedSongIds,
-                                            onSongLongPress = onSongLongPress,
-                                            onSongSelectionToggle = onSongSelectionToggle,
-                                            getSelectionIndex = playerViewModel.multiSelectionStateHolder::getSelectionIndex,
-                                            onLocateCurrentSongVisibilityChanged = { foldersShowLocateButton = it },
-                                            onRegisterLocateCurrentSongAction = { foldersLocateAction = it },
-                                            pendingLocatePath = pendingFoldersLocatePath,
-                                            onClearPendingLocate = { pendingFoldersLocatePath = null },
-                                            onRequestCrossFolderLocate = { folderPath ->
-                                                pendingFoldersLocatePath = folderPath
-                                                playerViewModel.navigateToFolder(folderPath)
-                                            }
-                                        )
-                                    }
-
-                                    null -> Unit
+                                                                            val folders = playerUiState.musicFolders
+                                                                            val currentFolder = playerUiState.currentFolder
+                                                                            val isLoading = playerUiState.isLoadingLibraryCategories
+                                                                            val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
+                                                                            val defaultFolderName = stringResource(R.string.presentation_batch_d_folder_name_fallback)
+                                                                            LibraryFoldersTab(
+                                                                                folders = folders,
+                                                                                currentFolder = currentFolder,
+                                                                                isLoading = isLoading,
+                                                                                bottomBarHeight = bottomBarHeightDp,
+                                                                                stablePlayerState = stablePlayerState,
+                                                                                onNavigateBack = { playerViewModel.navigateBackFolder() },
+                                                                                onFolderClick = { folderPath -> playerViewModel.navigateToFolder(folderPath) },
+                                                                                onFolderAsPlaylistClick = { folder ->
+                                                                                    val encodedPath = Uri.encode(folder.path)
+                                                                                    navController.navigateSafelyReplacing(
+                                                                                        route = Screen.PlaylistDetail.createRoute(
+                                                                                            "${PlaylistViewModel.FOLDER_PLAYLIST_PREFIX}$encodedPath"
+                                                                                        ),
+                                                                                        patternToPop = Screen.PlaylistDetail.route
+                                                                                    )
+                                                                                },
+                                                                                onPlaySong = { song, queue ->
+                                                                                    playerViewModel.showAndPlaySong(
+                                                                                        song,
+                                                                                        queue,
+                                                                                        currentFolder?.name ?: defaultFolderName
+                                                                                    )
+                                                                                },
+                                                                                onMoreOptionsClick = stableOnMoreOptionsClick,
+                                                                                isPlaylistView = playerUiState.isFoldersPlaylistView,
+                                                                                currentSortOption = playerUiState.currentFolderSortOption,
+                                                                                isRefreshing = isRefreshing,
+                                                                                onRefresh = onRefresh,
+                                                                                isSelectionMode = isSelectionMode,
+                                                                                selectedSongIds = selectedSongIds,
+                                                                                onSongLongPress = onSongLongPress,
+                                                                                onSongSelectionToggle = onSongSelectionToggle,
+                                                                                getSelectionIndex = playerViewModel.multiSelectionStateHolder::getSelectionIndex,
+                                                                                onLocateCurrentSongVisibilityChanged = { foldersShowLocateButton = it },
+                                                                                onRegisterLocateCurrentSongAction = { foldersLocateAction = it },
+                                                                                pendingLocatePath = pendingFoldersLocatePath,
+                                                                                onClearPendingLocate = { pendingFoldersLocatePath = null },
+                                                                                onRequestCrossFolderLocate = { folderPath ->
+                                                                                    pendingFoldersLocatePath = folderPath
+                                                                                    playerViewModel.navigateToFolder(folderPath)
+                                                                                }
+                                                                            )
+                                                                        }
+                                                                        null -> Unit
                                 }
                             }
 
@@ -1388,20 +1307,6 @@ fun LibraryScreen(
                             )
                         }
                     }
-                }
-                if (
-                    isLibraryContentEmpty &&
-                    (
-                            playerUiState.isSyncingLibrary ||
-                                    playerUiState.isLoadingInitialSongs ||
-                                    playerUiState.isLoadingLibraryCategories
-                            )
-                ) {
-                    // The full-screen overlay is reserved for first-launch / empty library
-                    // states. Once the user has content, in-place indicators (pull-to-refresh
-                    // spinner + LibraryInlineSyncIndicator) handle sync feedback so the
-                    // list stays visible.
-                    LibrarySyncOverlay(syncManager = syncManager)
                 }
             }
             //Grad box
@@ -1837,119 +1742,7 @@ private fun CompactLibraryPagerIndicator(
     }
 }
 
-/**
- * Slim, non-intrusive indicator for sync work that should not keep the list pulled
- * down: automatic startup syncs, background maintenance, and manual refreshes after
- * the short pull-to-refresh confirmation window. It sits just below
- * [LibraryActionRow] and collapses to zero height when not active.
- *
- * Distinct from [LibrarySyncOverlay], which is reserved for initial empty-library
- * loads. The parent screen also gates this indicator off while the pull spinner is
- * visible, so the two feedback channels do not compete.
- */
-@Composable
-private fun LibraryInlineSyncIndicator(
-    visible: Boolean,
-    syncManager: com.lostf1sh.pixelplayeross.data.worker.SyncManager
-) {
-    AnimatedVisibility(
-        visible = visible,
-        enter = androidx.compose.animation.expandVertically(
-            expandFrom = Alignment.Top,
-            animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)
-        ) + androidx.compose.animation.fadeIn(animationSpec = tween(180)),
-        exit = androidx.compose.animation.shrinkVertically(
-            shrinkTowards = Alignment.Top,
-            animationSpec = tween(durationMillis = 200, easing = FastOutSlowInEasing)
-        ) + androidx.compose.animation.fadeOut(animationSpec = tween(160))
-    ) {
-        // Collected inside this subtree so progress ticks don't recompose the
-        // parent screen — same pattern as LibrarySyncOverlay.
-        val syncProgress by syncManager.syncProgress
-            .collectAsStateWithLifecycle(initialValue = SyncProgress())
 
-        val phaseLabel = when (syncProgress.phase) {
-            SyncProgress.SyncPhase.FETCHING_MEDIASTORE ->
-                stringResource(R.string.sync_scanning)
-            SyncProgress.SyncPhase.PROCESSING_FILES,
-            SyncProgress.SyncPhase.SAVING_TO_DATABASE ->
-                stringResource(R.string.sync_processing)
-            SyncProgress.SyncPhase.SCANNING_LRC ->
-                stringResource(R.string.library_background_sync_lyrics)
-            SyncProgress.SyncPhase.CLEANING_CACHE ->
-                stringResource(R.string.library_background_sync_cache)
-            SyncProgress.SyncPhase.SYNCING_CLOUD ->
-                stringResource(R.string.library_background_sync_cloud)
-            else ->
-                stringResource(R.string.sync_in_progress)
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp)
-        ) {
-            Text(
-                text = phaseLabel,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            LinearWavyProgressIndicator(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(4.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-            )
-        }
-    }
-}
-
-/**
- * P1-1: Isolated sync/loading overlay composable.
- *
- * By collecting [SyncManager.syncProgress] HERE instead of in the parent [LibraryScreen],
- * only this small subtree recomposes on every progress tick (e.g., file count updates
- * during a library scan). The rest of [LibraryScreen] — including the Scaffold, pager,
- * and all tab content — remains unaffected during sync.
- */
-@Composable
-private fun LibrarySyncOverlay(syncManager: com.lostf1sh.pixelplayeross.data.worker.SyncManager) {
-    val syncProgress by syncManager.syncProgress
-        .collectAsStateWithLifecycle(initialValue = SyncProgress())
-
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.5f)
-    ) {
-        Box(contentAlignment = Alignment.Center) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(32.dp)
-            ) {
-                if (syncProgress.hasProgress && syncProgress.isRunning) {
-                    // Show progress bar with file count when we have progress info
-                    SyncProgressBar(
-                        syncProgress = syncProgress,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    // Show indeterminate loading indicator when scanning starts
-                    LoadingIndicator(modifier = Modifier.size(64.dp))
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = stringResource(R.string.syncing_library),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable

@@ -15,9 +15,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.PlayerSheetState
 import kotlinx.coroutines.CoroutineScope
+import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 
 internal data class QueueSheetState(
     val showQueueSheet: Boolean,
+    val isCollapsing: Boolean,
     val allowQueueSheetInteraction: Boolean,
     val queueSheetOffset: Animatable<Float, AnimationVector1D>,
     val queueSheetHeightPx: Float,
@@ -26,6 +29,7 @@ internal data class QueueSheetState(
     val onQueueSheetHeightPxChange: (Float) -> Unit
 )
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 internal fun rememberQueueSheetState(
     scope: CoroutineScope,
@@ -35,7 +39,10 @@ internal fun rememberQueueSheetState(
     showPlayerContentArea: Boolean,
     currentSheetContentState: PlayerSheetState
 ): QueueSheetState {
+    val motionScheme = MotionScheme.expressive()
+    val queueAnimationSpec = remember { motionScheme.defaultSpatialSpec<Float>() }
     var showQueueSheet by remember { mutableStateOf(false) }
+    var isCollapsing by remember { mutableStateOf(false) }
     val allowQueueSheetInteraction by remember(showPlayerContentArea, currentSheetContentState) {
         derivedStateOf {
             showPlayerContentArea && currentSheetContentState == PlayerSheetState.EXPANDED
@@ -71,7 +78,8 @@ internal fun rememberQueueSheetState(
     val showQueueSheetState = rememberUpdatedState(showQueueSheet)
     val queueSheetController = remember(
         scope,
-        queueSheetOffset
+        queueSheetOffset,
+        queueAnimationSpec
     ) {
         QueueSheetController(
             scope = scope,
@@ -81,12 +89,15 @@ internal fun rememberQueueSheetState(
             minFlingTravelPxProvider = { queueMinFlingTravelPxState.value },
             dragThresholdPxProvider = { queueDragThresholdPxState.value },
             showQueueSheetProvider = { showQueueSheetState.value },
-            onShowQueueSheetChange = { showQueueSheet = it }
+            onShowQueueSheetChange = { showQueueSheet = it },
+            onIsCollapsingChange = { isCollapsing = it },
+            animationSpec = queueAnimationSpec
         )
     }
 
     return QueueSheetState(
         showQueueSheet = showQueueSheet,
+        isCollapsing = isCollapsing,
         allowQueueSheetInteraction = allowQueueSheetInteraction,
         queueSheetOffset = queueSheetOffset,
         queueSheetHeightPx = queueSheetHeightPx,

@@ -47,6 +47,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MotionScheme
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -105,8 +106,14 @@ import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.rounded.Cloud
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.Icons
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.TextButton
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.material3.AlertDialog
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.res.stringResource
 import androidx.media3.common.Player
@@ -133,6 +140,7 @@ import com.lostf1sh.pixelplayeross.utils.LyricsImportSecurity
 import com.lostf1sh.pixelplayeross.utils.LyricsImportValidationResult
 import com.lostf1sh.pixelplayeross.utils.ValidatedLyricsImport
 import com.lostf1sh.pixelplayeross.utils.formatDuration
+import androidx.compose.foundation.lazy.items
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -223,6 +231,7 @@ fun FullPlayerContent(
     onQueueDragStart: () -> Unit,
     onQueueDrag: (Float) -> Unit,
     onQueueRelease: (Float, Float) -> Unit,
+    onNavigateToPlaybackSettings: () -> Unit,
     onShuffleToggle: () -> Unit,
     onRepeatToggle: () -> Unit,
     onFavoriteToggle: () -> Unit
@@ -238,6 +247,7 @@ fun FullPlayerContent(
     var showSongInfoBottomSheet by remember { mutableStateOf(false) }
     var showLyricsSheet by remember { mutableStateOf(false) }
     var showArtistPicker by rememberSaveable { mutableStateOf(false) }
+    var showAudioQualityDialog by remember { mutableStateOf(false) }
     
     val lyricsSearchUiState by playerViewModel.lyricsSearchUiState.collectAsStateWithLifecycle()
 
@@ -324,16 +334,12 @@ fun FullPlayerContent(
         LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
 
-    // Logic for the Lyrics button in the expanded player
     val onLyricsClick = {
         val lyrics = lyricsProvider()
         if (lyrics?.synced.isNullOrEmpty() && lyrics?.plain.isNullOrEmpty()) {
-            // If there are no lyrics, show the dialog to search
-            showFetchLyricsDialog = true
-        } else {
-            // If there are lyrics, show the sheet directly
-            showLyricsSheet = true
+            playerViewModel.fetchLyricsForCurrentSong(forcePickResults = false)
         }
+        showLyricsSheet = true
     }
 
     if (showFetchLyricsDialog) {
@@ -535,7 +541,8 @@ fun FullPlayerContent(
             playerOnBaseColor = playerOnBaseColor,
             allowRealtimeUpdates = allowRealtimeUpdates,
             isSheetDragGestureActive = isSheetDragGestureActive,
-            loadingTweaks = loadingTweaks
+            loadingTweaks = loadingTweaks,
+            onAudioMetaClick = { showAudioQualityDialog = true }
         )
     }
 
@@ -708,7 +715,7 @@ fun FullPlayerContent(
 
                                     if (currentSong != null && currentSong.contentUriString.startsWith("http")) {
                                         Icon(
-                                            imageVector = androidx.compose.material.icons.Icons.Rounded.Cloud,
+                                            imageVector = Icons.Rounded.Cloud,
                                             contentDescription = stringResource(R.string.presentation_batch_g_player_cd_cloud_stream),
                                             tint = LocalMaterialTheme.current.onPrimaryContainer.copy(alpha = 0.6f),
                                             modifier = Modifier.padding(start = 8.dp).size(16.dp)
@@ -869,6 +876,90 @@ fun FullPlayerContent(
             }
         )
     }
+
+    if (showAudioQualityDialog) {
+        val deezerQuality by playerViewModel.deezerAudioQuality.collectAsStateWithLifecycle()
+        val currentTrackQuality by playerViewModel.currentTrackDeezerQuality.collectAsStateWithLifecycle()
+        val effectiveQuality = currentTrackQuality ?: deezerQuality
+        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { showAudioQualityDialog = false },
+            sheetState = sheetState,
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
+        ) {
+            Column(modifier = Modifier.padding(bottom = 24.dp)) {
+                Text(
+                    text = "Audio Quality",
+                    style = MaterialTheme.typography.headlineSmall,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                )
+                
+                androidx.compose.foundation.lazy.LazyColumn(
+                    modifier = Modifier
+                        .padding(horizontal = 16.dp)
+                        .heightIn(max = 400.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality.entries.toList()) { quality ->
+                        val isSelected = quality == effectiveQuality
+                        val containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
+                        val contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+                        
+                        androidx.compose.material3.Surface(
+                            onClick = {
+                                playerViewModel.changeCurrentTrackQuality(quality)
+                                showAudioQualityDialog = false
+                            },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                            color = containerColor,
+                            modifier = Modifier.fillMaxWidth().height(72.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 24.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = quality.label,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = if (isSelected) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
+                                    color = contentColor,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                
+                                if (isSelected) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = "Selected",
+                                        tint = contentColor
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    TextButton(onClick = {
+                        showAudioQualityDialog = false
+                        onCollapse()
+                        onNavigateToPlaybackSettings()
+                    }) {
+                        Text("Set Default quality", fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
 }
 
 
@@ -1001,9 +1092,8 @@ private fun FullPlayerControlsSection(
     onRepeatToggle: () -> Unit,
     onFavoriteToggle: () -> Unit
 ) {
-    val stableControlAnimationSpec = remember {
-        tween<Float>(durationMillis = 240, easing = FastOutSlowInEasing)
-    }
+    val motionScheme = remember { MotionScheme.expressive() }
+    val stableControlAnimationSpec = remember { motionScheme.fastSpatialSpec<Float>() }
     val shouldDelay = loadingTweaks.delayAll || loadingTweaks.delayControls
 
     DelayedContent(
@@ -1087,7 +1177,8 @@ private fun FullPlayerProgressSection(
     playerOnBaseColor: Color,
     allowRealtimeUpdates: Boolean,
     isSheetDragGestureActive: Boolean,
-    loadingTweaks: FullPlayerLoadingTweaks
+    loadingTweaks: FullPlayerLoadingTweaks,
+    onAudioMetaClick: (() -> Unit)? = null
 ) {
     val isMetadataForCurrentSong = playbackMetadataMediaId == song.id
     val audioMimeType = if (isMetadataForCurrentSong) {
@@ -1125,7 +1216,8 @@ private fun FullPlayerProgressSection(
         timeTextColor = playerOnBaseColor,
         allowRealtimeUpdates = allowRealtimeUpdates,
         isSheetDragGestureActive = isSheetDragGestureActive,
-        loadingTweaks = loadingTweaks
+        loadingTweaks = loadingTweaks,
+        onAudioMetaClick = onAudioMetaClick
     )
 }
 
@@ -1489,13 +1581,16 @@ private fun formatAudioMetaLabel(mimeType: String?, bitrate: Int?, sampleRate: I
         ?.uppercase(Locale.getDefault())
 
     val parts = buildList {
-        sampleRate?.takeIf { it > 0 }?.let { add(String.format(Locale.US, "%.1f kHz", it / 1000.0)) }
         bitrate?.takeIf { it > 0 }?.let { bitrateValue ->
-            val kbpsLabel = "${bitrateValue / 1000} kbps"
-            if (formatLabel != null) {
-                add("$kbpsLabel \u2022 $formatLabel")
+            if (formatLabel == "FLAC") {
+                add(formatLabel)
             } else {
-                add(kbpsLabel)
+                val kbpsLabel = "${bitrateValue / 1000} kbps"
+                if (formatLabel != null) {
+                    add("$kbpsLabel \u2022 $formatLabel")
+                } else {
+                    add(kbpsLabel)
+                }
             }
         } ?: formatLabel?.let { add(it) }
     }
@@ -1523,6 +1618,7 @@ private fun PlayerProgressBarSection(
     allowRealtimeUpdates: Boolean = true,
     isSheetDragGestureActive: Boolean = false,
     loadingTweaks: FullPlayerLoadingTweaks? = null,
+    onAudioMetaClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val progressSectionHorizontalInset = 0.dp
@@ -1708,7 +1804,8 @@ private fun PlayerProgressBarSection(
                 isVisible = isVisible,
                 textColor = timeTextColor,
                 audioMetaLabel = displayAudioMetaLabel,
-                horizontalTrackInset = progressSectionHorizontalInset
+                horizontalTrackInset = progressSectionHorizontalInset,
+                onAudioMetaClick = onAudioMetaClick
             )
         }
     }
@@ -1767,7 +1864,8 @@ private fun EfficientTimeLabels(
     isVisible: Boolean,
     textColor: Color,
     audioMetaLabel: String?,
-    horizontalTrackInset: Dp
+    horizontalTrackInset: Dp,
+    onAudioMetaClick: (() -> Unit)? = null
 ) {
     val coarsePositionMs by remember(isVisible, positionState) {
         derivedStateOf {
@@ -1812,7 +1910,8 @@ private fun EfficientTimeLabels(
             Surface(
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .padding(horizontal = 58.dp),
+                    .padding(horizontal = 58.dp)
+                    .clickable { onAudioMetaClick?.invoke() },
                 shape = RoundedCornerShape(999.dp),
                 color = textColor.copy(alpha = 0.14f),
                 contentColor = textColor.copy(alpha = 0.96f)

@@ -113,11 +113,6 @@ fun FetchLyricsDialog(
                     is LyricsSearchUiState.NotFound -> {
                         NotFoundContent(
                             message = uiState.message,
-                            initialTitle = currentSong?.title.orEmpty(),
-                            initialArtist = currentSong?.displayArtist,
-                            onManualSearch = { title, artist ->
-                                onManualSearch(title, artist)
-                            },
                             onCancel = onDismiss
                         )
                     }
@@ -329,6 +324,7 @@ private fun PickResultContent(
         item {
             ProviderText(
                 providerText = stringResource(R.string.lyrics_provided_by),
+                providerName = "LRCLIB",
                 uri = stringResource(R.string.lrclib_uri),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp)
@@ -434,22 +430,9 @@ private fun ResultItemCard(
 
 @Composable
 fun NotFoundContent(
-    initialTitle: String,
-    initialArtist: String?,
     message: String,
-    onManualSearch: (String, String?) -> Unit,
     onCancel: () -> Unit
 ) {
-    val normalizedArtist = rememberSaveable(initialArtist) {
-        initialArtist
-            ?.takeIf { it.isNotBlank() }
-            ?.takeUnless { it.equals("<unknown>", ignoreCase = true) }
-            .orEmpty()
-    }
-
-    var title by rememberSaveable { mutableStateOf(initialTitle) }
-    var artist by rememberSaveable { mutableStateOf(normalizedArtist) }
-
     Box(
         modifier = Modifier
             .size(72.dp)
@@ -472,86 +455,16 @@ fun NotFoundContent(
         style = MaterialTheme.typography.headlineSmall
     )
 
-    Spacer(Modifier.height(12.dp))
-
-    Text(
-        text = stringResource(R.string.lyrics_custom_search_hint),
-        style = MaterialTheme.typography.bodyMedium,
-        textAlign = TextAlign.Center,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
-
-    Spacer(Modifier.height(16.dp))
-
-    // Title input
-    Column(
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.song_field_title),
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.labelLarge
-        )
-        OutlinedTextField(
-            value = title,
-            onValueChange = { title = it },
-            placeholder = { Text(stringResource(R.string.song_field_title)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-    }
-
-    Spacer(Modifier.height(8.dp))
-
-    // Artist input
-    Column(
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Text(
-            text = stringResource(R.string.song_field_artist_optional),
-            color = MaterialTheme.colorScheme.primary,
-            style = MaterialTheme.typography.labelLarge
-        )
-        OutlinedTextField(
-            value = artist,
-            onValueChange = { artist = it },
-            placeholder = { Text(stringResource(R.string.song_field_artist_optional)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-    }
-
     Spacer(Modifier.height(24.dp))
 
-    Column(
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxWidth()
+    Button(
+        onClick = onCancel,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp),
+        shape = RoundedCornerShape(18.dp)
     ) {
-        Button(
-            onClick = {
-                onManualSearch(
-                    title,
-                    artist.takeIf { it.isNotBlank() }
-                )
-            },
-            enabled = title.isNotBlank(),
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(52.dp),
-            shape = RoundedCornerShape(18.dp)
-        ) {
-            Icon(Icons.Rounded.Search, null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.search))
-        }
-
-        TextButton(
-            onClick = onCancel,
-            modifier = Modifier.fillMaxWidth().height(52.dp),
-            shape = RoundedCornerShape(18.dp)
-        ) {
-            Text(stringResource(R.string.cancel), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
+        Text(stringResource(R.string.ok))
     }
 }
 

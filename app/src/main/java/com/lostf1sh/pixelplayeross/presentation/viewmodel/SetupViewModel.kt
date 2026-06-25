@@ -9,17 +9,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lostf1sh.pixelplayeross.R
-import com.lostf1sh.pixelplayeross.data.backup.BackupManager
-import com.lostf1sh.pixelplayeross.data.backup.model.BackupTransferProgressUpdate
-import com.lostf1sh.pixelplayeross.data.backup.model.BackupOperationType
-import com.lostf1sh.pixelplayeross.data.backup.model.BackupSection
-import com.lostf1sh.pixelplayeross.data.backup.model.RestorePlan
-import com.lostf1sh.pixelplayeross.data.backup.model.RestoreResult
+
+import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerAuthApi
 import com.lostf1sh.pixelplayeross.data.preferences.AppThemeMode
 import com.lostf1sh.pixelplayeross.data.preferences.ThemePreferencesRepository
 import com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository
 import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
-import com.lostf1sh.pixelplayeross.data.worker.SyncManager
+
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +26,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import java.io.File
@@ -46,31 +43,34 @@ data class SetupUiState(
     val externalArtistImagesEnabled: Boolean = false,
     val alarmsPermissionGranted: Boolean = false,
     val appThemeMode: String = AppThemeMode.DARK,
-    val isInspectingBackup: Boolean = false,
-    val isRestoringBackup: Boolean = false,
-    val restorePlan: RestorePlan? = null,
-    val backupTransferProgress: BackupTransferProgressUpdate? = null
+    // Deezer auth
+    val deezerAuthUrl: String? = null,
+    val deezerAuthCode: String? = null,
+    val deezerLoginStatus: DeezerLoginStatus = DeezerLoginStatus.IDLE,
+    val deezerLoggedIn: Boolean = false,
 ) {
     val allPermissionsGranted: Boolean
         get() {
-            val mediaOk = mediaPermissionGranted
             val notificationsOk = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) notificationsPermissionGranted else true
-            return mediaOk && notificationsOk
+            return notificationsOk
         }
+}
+
+enum class DeezerLoginStatus {
+    IDLE, REQUESTING, WAITING_FOR_USER, POLLING, SUCCESS, ERROR
 }
 
 sealed interface SetupEvent {
     data class Message(val value: String) : SetupEvent
-    data class RestoreCompleted(val message: String) : SetupEvent
+
 }
 
 @HiltViewModel
 class SetupViewModel @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val themePreferencesRepository: ThemePreferencesRepository,
-    private val syncManager: SyncManager,
-    private val backupManager: BackupManager,
     private val musicRepository: MusicRepository,
+    private val deezerAuthApi: DeezerAuthApi,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -79,13 +79,7 @@ class SetupViewModel @Inject constructor(
     private val _events = MutableSharedFlow<SetupEvent>()
     val events = _events.asSharedFlow()
     
-    /**
-     * Expose sync progress for UI to show during initial setup
-     */
-    /**
-     * Expose sync progress for UI to show during initial setup
-     */
-    val isSyncing = syncManager.isSyncing
+
 
     private val fileExplorerStateHolder = FileExplorerStateHolder(userPreferencesRepository, viewModelScope, context)
 
@@ -216,7 +210,6 @@ class SetupViewModel @Inject constructor(
         hasPendingDirectoryRuleChanges = false
         viewModelScope.launch {
             latestDirectoryRuleUpdateJob?.join()
-            syncManager.forceRefresh()
         }
     }
 
@@ -294,134 +287,83 @@ class SetupViewModel @Inject constructor(
         }
     }
     
-    /**
-     * Retry the initial sync if it failed.
-     * Can be called from UI when user wants to retry after a failure.
-     */
-    fun retrySync() {
-        viewModelScope.launch {
-            syncManager.fullSync(deepScan = false)
-        }
-    }
 
-    fun inspectBackupFile(uri: Uri) {
-        if (_uiState.value.isInspectingBackup || _uiState.value.isRestoringBackup) return
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isInspectingBackup = true,
-                    restorePlan = null,
-                    backupTransferProgress = null
-                )
-            }
-            val result = backupManager.inspectBackup(uri)
-            result.fold(
-                onSuccess = { plan ->
-                    _uiState.update {
-                        it.copy(
-                            isInspectingBackup = false,
-                            restorePlan = plan
-                        )
-                    }
-                },
-                onFailure = { error ->
-                    _uiState.update { it.copy(isInspectingBackup = false) }
-                    _events.emit(
-                        SetupEvent.Message(
-                            context.getString(
-                                R.string.backup_invalid_format,
-                                error.localizedMessage ?: context.getString(R.string.error_unknown),
-                            )
-                        )
-                    )
-                }
-            )
-        }
-    }
-
-    fun updateRestorePlanSelection(selectedModules: Set<BackupSection>) {
-        _uiState.update { state ->
-            state.restorePlan?.let { plan ->
-                state.copy(restorePlan = plan.copy(selectedModules = selectedModules))
-            } ?: state
-        }
-    }
-
-    fun clearRestorePlan() {
-        _uiState.update {
-            it.copy(
-                restorePlan = null,
-                isInspectingBackup = false,
-                isRestoringBackup = false,
-                backupTransferProgress = null
-            )
-        }
-    }
-
-    fun restoreFromPlan(uri: Uri) {
-        val plan = _uiState.value.restorePlan ?: return
-        if (plan.selectedModules.isEmpty() || _uiState.value.isRestoringBackup) return
-
-        viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isRestoringBackup = true,
-                    backupTransferProgress = BackupTransferProgressUpdate(
-                        operation = BackupOperationType.IMPORT,
-                        step = 0,
-                        totalSteps = 1,
-                        title = context.getString(R.string.backup_progress_preparing_restore),
-                        detail = context.getString(R.string.backup_progress_starting_task),
-                    )
-                )
-            }
-
-            val result = backupManager.restore(uri, plan) { progress ->
-                _uiState.update { state -> state.copy(backupTransferProgress = progress) }
-            }
-
-            when (result) {
-                is RestoreResult.Success -> {
-                    _events.emit(SetupEvent.RestoreCompleted(context.getString(R.string.restore_completed_success)))
-                }
-                is RestoreResult.PartialFailure -> {
-                    val canFinishSetup = result.succeeded.isNotEmpty() || !result.rolledBack
-                    if (canFinishSetup) {
-                        _events.emit(
-                            SetupEvent.RestoreCompleted(
-                                context.getString(R.string.restore_completed_partial_issues),
-                            )
-                        )
-                    } else {
-                        _events.emit(
-                            SetupEvent.Message(
-                                context.getString(
-                                    R.string.restore_could_not_complete,
-                                    result.failed.values.joinToString(),
-                                ),
-                            )
-                        )
-                    }
-                }
-                is RestoreResult.TotalFailure -> {
-                    _events.emit(SetupEvent.Message(context.getString(R.string.restore_failed_format, result.error)))
-                }
-            }
-
-            _uiState.update {
-                it.copy(
-                    isRestoringBackup = false,
-                    restorePlan = null,
-                    backupTransferProgress = null
-                )
-            }
-        }
-    }
 
     private suspend fun completeSetup(syncAfter: Boolean) {
         userPreferencesRepository.setInitialSetupDone(true)
-        if (syncAfter) {
-            syncManager.fullSync(deepScan = false)
+    }
+
+    // ── Deezer SmartLogin ───────────────────────────────────────────────
+    companion object {
+        private const val DEEZER_APP_ID = "447462"
+    }
+
+    private var pollingJob: Job? = null
+
+    fun startDeezerLogin() {
+        pollingJob?.cancel()
+        _uiState.update { it.copy(deezerLoginStatus = DeezerLoginStatus.REQUESTING) }
+
+        pollingJob = viewModelScope.launch {
+            try {
+                val response = deezerAuthApi.getSmartLoginCode(DEEZER_APP_ID)
+                val data = response.data ?: run {
+                    _uiState.update { it.copy(deezerLoginStatus = DeezerLoginStatus.ERROR) }
+                    return@launch
+                }
+
+                _uiState.update {
+                    it.copy(
+                        deezerAuthUrl = data.url,
+                        deezerAuthCode = data.smartLoginCode,
+                        deezerLoginStatus = DeezerLoginStatus.WAITING_FOR_USER
+                    )
+                }
+
+                val intervalMs = (data.pollingInterval * 1000).toLong().coerceAtLeast(2000L)
+
+                // Poll until the user authorises or coroutine is cancelled
+                _uiState.update { it.copy(deezerLoginStatus = DeezerLoginStatus.POLLING) }
+                while (true) {
+                    delay(intervalMs)
+                    try {
+                        val poll = deezerAuthApi.pollSmartLogin(data.smartLoginCode, DEEZER_APP_ID)
+                        val accessToken = poll.data?.accessToken
+                        val userId = poll.data?.userId
+                        if (accessToken != null && userId != null) {
+                            userPreferencesRepository.saveDeezerAuth(accessToken, userId)
+                            _uiState.update {
+                                it.copy(
+                                    deezerLoginStatus = DeezerLoginStatus.SUCCESS,
+                                    deezerLoggedIn = true
+                                )
+                            }
+                            return@launch
+                        }
+                    } catch (_: Exception) {
+                        // Transient network error during poll – keep going
+                    }
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(deezerLoginStatus = DeezerLoginStatus.ERROR) }
+            }
         }
+    }
+
+    fun cancelDeezerLogin() {
+        pollingJob?.cancel()
+        pollingJob = null
+        _uiState.update {
+            it.copy(
+                deezerLoginStatus = DeezerLoginStatus.IDLE,
+                deezerAuthUrl = null,
+                deezerAuthCode = null
+            )
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        pollingJob?.cancel()
     }
 }

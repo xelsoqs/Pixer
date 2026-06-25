@@ -34,7 +34,7 @@ import androidx.navigation.navArgument
 import com.lostf1sh.pixelplayeross.data.preferences.LaunchTab
 import com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository
 import com.lostf1sh.pixelplayeross.presentation.screens.AlbumDetailScreen
-import com.lostf1sh.pixelplayeross.presentation.screens.AccountsScreen
+import com.lostf1sh.pixelplayeross.presentation.screens.AccountScreen
 import com.lostf1sh.pixelplayeross.presentation.screens.ArtistDetailScreen
 import com.lostf1sh.pixelplayeross.presentation.screens.ArtistSettingsScreen
 import com.lostf1sh.pixelplayeross.presentation.screens.DailyMixScreen
@@ -226,14 +226,8 @@ fun AppNavigation(
                 popExitTransition = { popExitTransition() },
             ) {
                 ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
-                    AccountsScreen(
-                        onBackClick = { navController.popBackStack() },
-                        onOpenNavidromeDashboard = {
-                            navController.navigateSafely(Screen.NavidromeDashboard.route)
-                        },
-                        onOpenJellyfinDashboard = {
-                            navController.navigateSafely(Screen.JellyfinDashboard.route)
-                        }
+                    AccountScreen(
+                        navController = navController
                     )
                 }
             }
@@ -548,32 +542,6 @@ fun AppNavigation(
                     com.lostf1sh.pixelplayeross.presentation.screens.DeviceCapabilitiesScreen(
                         navController = navController,
                         playerViewModel = playerViewModel
-                    )
-                }
-            }
-            composable(
-                Screen.NavidromeDashboard.route,
-                enterTransition = { enterTransition() },
-                exitTransition = { exitTransition() },
-                popEnterTransition = { popEnterTransition() },
-                popExitTransition = { popExitTransition() },
-            ) {
-                ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
-                    com.lostf1sh.pixelplayeross.presentation.navidrome.dashboard.NavidromeDashboardScreen(
-                        onBack = { navController.popBackStack() }
-                    )
-                }
-            }
-            composable(
-                Screen.JellyfinDashboard.route,
-                enterTransition = { enterTransition() },
-                exitTransition = { exitTransition() },
-                popEnterTransition = { popEnterTransition() },
-                popExitTransition = { popExitTransition() },
-            ) {
-                ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
-                    com.lostf1sh.pixelplayeross.presentation.jellyfin.dashboard.JellyfinDashboardScreen(
-                        onBack = { navController.popBackStack() }
                     )
                 }
             }

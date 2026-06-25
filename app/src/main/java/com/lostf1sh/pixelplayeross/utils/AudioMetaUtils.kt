@@ -4,7 +4,7 @@ import android.media.MediaExtractor
 import android.media.MediaFormat
 import android.media.MediaMetadataRetriever
 import android.os.Build
-import com.lostf1sh.pixelplayeross.data.database.MusicDao
+
 import java.io.File
 import java.util.Locale
 import timber.log.Timber
@@ -21,15 +21,7 @@ object AudioMetaUtils {
      * Returns audio metadata for a given file path.
      * Tries MediaMetadataRetriever first, then falls back to MediaExtractor.
      */
-    suspend fun getAudioMetadata(musicDao: MusicDao, id: Long, filePath: String, deepScan: Boolean): AudioMeta {
-        val cached = musicDao.getAudioMetadataById(id)
-        if (!deepScan && cached != null &&
-            cached.mimeType != null &&
-            cached.bitrate != null &&
-            cached.sampleRate != null
-        )
-            return cached
-
+    suspend fun getAudioMetadata(id: Long, filePath: String, deepScan: Boolean): AudioMeta {
         val file = File(filePath)
         if (!file.exists() || !file.canRead()) return AudioMeta(null, null, null)
 

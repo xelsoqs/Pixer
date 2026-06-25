@@ -1160,6 +1160,7 @@ private fun stripFormatCharacters(value: String): String {
 @Composable
 fun ProviderText(
     providerText: String,
+    providerName: String,
     uri: String,
     modifier: Modifier = Modifier,
     textAlign: TextAlign? = null,
@@ -1170,7 +1171,7 @@ fun ProviderText(
     val textColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
     val annotatedString = buildAnnotatedString {
         withStyle(style = SpanStyle(color = textColor)) {
-            append(providerText)
+            append("$providerText ")
         }
         withLink(
             LinkAnnotation.Url(
@@ -1178,7 +1179,7 @@ fun ProviderText(
                 styles = TextLinkStyles(style = SpanStyle(color = linkColor))
             )
         ) {
-            append(" LRCLIB")
+            append(providerName)
         }
     }
 

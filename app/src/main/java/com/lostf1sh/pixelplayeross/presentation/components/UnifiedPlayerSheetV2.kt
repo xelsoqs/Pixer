@@ -3,6 +3,7 @@ package com.lostf1sh.pixelplayeross.presentation.components
 import android.widget.Toast
 import com.lostf1sh.pixelplayeross.presentation.components.ExpressiveOfflineDialog
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.PredictiveBackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
@@ -23,6 +24,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -59,6 +62,7 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.lostf1sh.pixelplayeross.data.model.Song
+import com.lostf1sh.pixelplayeross.presentation.navigation.navigateSafely
 import com.lostf1sh.pixelplayeross.data.preferences.sanitizeNavBarCornerRadius
 import com.lostf1sh.pixelplayeross.presentation.components.scoped.PlayerAlbumNavigationEffect
 import com.lostf1sh.pixelplayeross.presentation.components.scoped.PlayerArtistNavigationEffect
@@ -101,7 +105,7 @@ private data class PlayerUiSheetSliceV2(
  * This path keeps behavior parity, but now owns its own runtime wiring so we can
  * profile and optimize V2 independently while preserving the Experimental switch.
  */
-@androidx.annotation.OptIn(UnstableApi::class)
+@androidx.annotation.OptIn(UnstableApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun UnifiedPlayerSheetV2(
     playerViewModel: PlayerViewModel,
@@ -240,9 +244,8 @@ fun UnifiedPlayerSheetV2(
     val playerContentExpansionFraction = playerViewModel.playerContentExpansionFraction
     val visualOvershootScaleY = remember { Animatable(1f) }
     val initialFullPlayerOffsetY = remember(density) { with(density) { 24.dp.toPx() } }
-    val sheetAnimationSpec = remember {
-        tween<Float>(durationMillis = ANIMATION_DURATION_MS, easing = FastOutSlowInEasing)
-    }
+    val motionScheme = remember { MotionScheme.expressive() }
+    val sheetAnimationSpec = remember { motionScheme.defaultSpatialSpec<Float>() }
     val sheetAnimationMutex = remember { MutatorMutex() }
     val sheetExpandedTargetY = 0f
     val initialY =
@@ -327,16 +330,18 @@ fun UnifiedPlayerSheetV2(
                 currentSheetContentState == PlayerSheetState.COLLAPSED
 
         previousSheetState = currentSheetContentState
-        animatePlayerSheet(targetExpanded = targetExpanded)
+        scope.launch {
+            animatePlayerSheet(targetExpanded = targetExpanded)
+        }
 
         if (showPlayerContentArea) {
             scope.launch {
-                visualOvershootScaleY.snapTo(1f)
                 if (targetExpanded) {
+                    visualOvershootScaleY.snapTo(1f)
                     visualOvershootScaleY.animateTo(
                         targetValue = 1f,
                         animationSpec = keyframes {
-                            durationMillis = 50
+                            durationMillis = 250
                             1.0f at 0
                             1.05f at 125
                             1.0f at 250
@@ -467,13 +472,19 @@ fun UnifiedPlayerSheetV2(
         registrationKey = currentBackStackEntry?.id
     )
 
+    val queuePredictiveBackProgress = remember { Animatable(0f) }
+    var queuePredictiveBackSwipeEdge by remember { mutableStateOf<Int?>(null) }
+
     val sheetOverlayState = rememberSheetOverlayState(
         density = density,
         showPlayerContentArea = showPlayerContentArea,
         hideMiniPlayer = hideMiniPlayer,
         showQueueSheet = showQueueSheet,
+        isQueueCollapsing = queueSheetState.isCollapsing,
         queueHiddenOffsetPx = queueHiddenOffsetPx,
-        screenHeightPx = screenHeightPx
+        screenHeightPx = screenHeightPx,
+        queueSheetOffset = queueSheetOffset,
+        queuePredictiveBackProgress = queuePredictiveBackProgress
     )
     val internalIsKeyboardVisible = sheetOverlayState.internalIsKeyboardVisible
     val actuallyShowSheetContent = sheetOverlayState.actuallyShowSheetContent
@@ -579,8 +590,24 @@ fun UnifiedPlayerSheetV2(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .offset { IntOffset(0, visualSheetTranslationYProvider().roundToInt()) }
-            .height(containerHeight),
+            .layout { measurable, constraints ->
+                val translationY = visualSheetTranslationYProvider().roundToInt()
+                val overshoot = if (currentSheetContentState == PlayerSheetState.EXPANDED && !isDragging) {
+                    -translationY
+                } else {
+                    if (translationY < 0) -translationY else 0
+                }
+                val targetHeight = constraints.maxHeight + overshoot
+                val placeable = measurable.measure(
+                    constraints.copy(
+                        minHeight = targetHeight,
+                        maxHeight = targetHeight
+                    )
+                )
+                layout(constraints.maxWidth, constraints.maxHeight) {
+                    placeable.placeRelative(0, translationY)
+                }
+            },
         shadowElevation = 0.dp,
         color = Color.Transparent
     ) {
@@ -698,10 +725,13 @@ fun UnifiedPlayerSheetV2(
                             currentPositionProvider = positionToDisplayProvider,
                             isFavorite = isFavorite,
                             shouldRenderFullPlayer = shouldRenderFullPlayer,
+                            currentHorizontalPaddingStartPxProvider = currentHorizontalPaddingStartPxProvider,
+                            currentHorizontalPaddingEndPxProvider = currentHorizontalPaddingEndPxProvider,
                             onShowQueueClicked = sheetActionHandlers.openQueueSheet,
                             onQueueDragStart = sheetActionHandlers.beginQueueDrag,
                             onQueueDrag = sheetActionHandlers.dragQueueBy,
                             onQueueRelease = sheetActionHandlers.endQueueDrag,
+                            onNavigateToSettingsPlayback = { navController.navigateSafely(com.lostf1sh.pixelplayeross.presentation.navigation.Screen.SettingsCategory.createRoute(com.lostf1sh.pixelplayeross.presentation.model.SettingsCategory.PLAYBACK.id)) }
                         )
                     }
                 }
@@ -722,13 +752,47 @@ fun UnifiedPlayerSheetV2(
                     onShowQueueClicked = sheetActionHandlers.openQueueSheet,
                     onQueueDragStart = sheetActionHandlers.beginQueueDrag,
                     onQueueDrag = sheetActionHandlers.dragQueueBy,
-                    onQueueRelease = sheetActionHandlers.endQueueDrag
+                    onQueueRelease = sheetActionHandlers.endQueueDrag,
+                    onNavigateToSettingsPlayback = { navController.navigateSafely(com.lostf1sh.pixelplayeross.presentation.navigation.Screen.SettingsCategory.createRoute(com.lostf1sh.pixelplayeross.presentation.model.SettingsCategory.PLAYBACK.id)) }
                 )
             }
 
-            BackHandler(enabled = isQueueVisible && !internalIsKeyboardVisible) {
-                sheetActionHandlers.animateQueueSheet(false)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                PredictiveBackHandler(enabled = isQueueVisible && !internalIsKeyboardVisible) { progressFlow ->
+                    try {
+                        progressFlow.collect { backEvent ->
+                            queuePredictiveBackSwipeEdge = backEvent.swipeEdge
+                            queuePredictiveBackProgress.snapTo(backEvent.progress)
+                        }
+                        scope.launch {
+                            launch {
+                                sheetActionHandlers.animateQueueSheet(false)
+                            }
+                            launch {
+                                queuePredictiveBackProgress.animateTo(
+                                    targetValue = 0f,
+                                    animationSpec = tween(ANIMATION_DURATION_MS)
+                                )
+                                queuePredictiveBackSwipeEdge = null
+                            }
+                        }
+                    } catch (_: kotlin.coroutines.cancellation.CancellationException) {
+                        scope.launch {
+                            queuePredictiveBackProgress.animateTo(
+                                targetValue = 0f,
+                                animationSpec = tween(ANIMATION_DURATION_MS)
+                            )
+                            queuePredictiveBackSwipeEdge = null
+                        }
+                    }
+                }
+            } else {
+                BackHandler(enabled = isQueueVisible && !internalIsKeyboardVisible) {
+                    sheetActionHandlers.animateQueueSheet(false)
+                }
             }
+
+            val queuePredictiveBackSwipeEdgeState = rememberUpdatedState(queuePredictiveBackSwipeEdge)
 
             UnifiedPlayerQueueAndSongInfoHost(
                 shouldRenderHost = shouldRenderQueueHost,
@@ -738,6 +802,7 @@ fun UnifiedPlayerSheetV2(
                 albumColorScheme = albumColorScheme,
                 queueScrimAlpha = queueScrimAlpha,
                 showQueueSheet = showQueueSheet,
+                isQueueCollapsing = queueSheetState.isCollapsing,
                 queueHiddenOffsetPx = queueHiddenOffsetPx,
                 queueSheetOffset = queueSheetOffset,
                 queueSheetHeightPx = queueSheetHeightPx,
@@ -755,7 +820,9 @@ fun UnifiedPlayerSheetV2(
                 onLaunchSaveQueueOverlay = sheetActionHandlers.onLaunchSaveQueueOverlay,
                 onNavigateToAlbum = sheetActionHandlers.onNavigateToAlbum,
                 onNavigateToArtist = sheetActionHandlers.onNavigateToArtist,
-                onNavigateToGenre = sheetActionHandlers.onNavigateToGenre
+                onNavigateToGenre = sheetActionHandlers.onNavigateToGenre,
+                queuePredictiveBackProgress = queuePredictiveBackProgress,
+                queuePredictiveBackSwipeEdge = queuePredictiveBackSwipeEdgeState
             )
         }
     }

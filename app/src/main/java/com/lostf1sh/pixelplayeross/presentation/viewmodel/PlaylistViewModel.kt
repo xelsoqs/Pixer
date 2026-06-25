@@ -14,7 +14,6 @@ import com.lostf1sh.pixelplayeross.data.model.fromPlaylistSource
 import com.lostf1sh.pixelplayeross.data.model.isSmartPlaylist
 import com.lostf1sh.pixelplayeross.data.model.toPlaylistSource
 import com.lostf1sh.pixelplayeross.data.playlist.M3uManager
-import com.lostf1sh.pixelplayeross.data.playlist.SmartPlaylistBuilder
 import com.lostf1sh.pixelplayeross.data.preferences.PlaylistPreferencesRepository
 import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -44,6 +43,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import timber.log.Timber
+import com.lostf1sh.pixelplayeross.data.repository.DeezerRepository
 
 data class PlaylistUiState(
     val playlists: List<Playlist> = emptyList(),
@@ -71,6 +71,7 @@ class PlaylistViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
     private val dailyMixManager: DailyMixManager,
     private val m3uManager: M3uManager,
+    private val deezerRepository: DeezerRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -158,6 +159,56 @@ class PlaylistViewModel @Inject constructor(
                 )
             } // Reset details and songs
             try {
+                if (playlistId.startsWith("deezer_")) {
+                    val rawId = playlistId.removePrefix("deezer_")
+                    val response = deezerRepository.getPlaylistTracks(rawId)
+                    if (response?.data != null) {
+                        val pseudoPlaylist = Playlist(
+                            id = playlistId,
+                            name = response.data.attributes?.name ?: "Deezer Playlist",
+                            songIds = response.data.included.map { it.id }
+                        )
+
+                        val songsList = response.data.included.mapNotNull { track ->
+                            val title = track.attributes?.title ?: return@mapNotNull null
+                            Song(
+                                id = track.id,
+                                title = title,
+                                artist = track.attributes.artistName ?: "Unknown Artist",
+                                artistId = 0L,
+                                album = track.attributes.albumName ?: "Unknown Album",
+                                albumId = 0L,
+                                path = "",
+                                contentUriString = "deezer://track/${track.id}",
+                                albumArtUriString = track.attributes.image?.large ?: track.attributes.image?.medium,
+                                duration = (track.attributes.duration * 1000L).takeIf { it > 0 } ?: 0L,
+                                mimeType = "audio/mpeg",
+                                bitrate = null,
+                                sampleRate = null
+                            )
+                        }
+
+                        _uiState.update {
+                            it.copy(
+                                currentPlaylistDetails = pseudoPlaylist,
+                                currentPlaylistSongs = songsList,
+                                isLoading = false,
+                                playlistNotFound = false
+                            )
+                        }
+                    } else {
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                playlistNotFound = true,
+                                currentPlaylistDetails = null,
+                                currentPlaylistSongs = emptyList()
+                            )
+                        }
+                    }
+                    return@launch
+                }
+
                 if (isFolderPlaylistId(playlistId)) {
                     val folderPath = Uri.decode(playlistId.removePrefix(FOLDER_PLAYLIST_PREFIX))
                     val folders = musicRepository.getMusicFolders().first()
@@ -330,17 +381,7 @@ class PlaylistViewModel @Inject constructor(
         rule: SmartPlaylistRule,
         limit: Int
     ): List<String> {
-        val allSongs = musicRepository.getAllSongsOnce()
-        if (allSongs.isEmpty()) return emptyList()
-
-        return SmartPlaylistBuilder.buildSongIds(
-            rule = rule,
-            allSongs = allSongs,
-            engagements = dailyMixManager.getAllEngagementStats(),
-            favoriteIds = musicRepository.getFavoriteSongIdsOnce(),
-            now = System.currentTimeMillis(),
-            limit = limit
-        )
+        return emptyList()
     }
 
     private suspend fun refreshSmartPlaylistIfNeeded(playlist: Playlist): Playlist {

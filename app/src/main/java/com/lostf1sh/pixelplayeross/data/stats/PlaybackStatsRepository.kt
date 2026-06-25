@@ -56,7 +56,12 @@ class PlaybackStatsRepository @Inject constructor(
         val timestamp: Long,
         val durationMs: Long,
         val startTimestamp: Long? = null,
-        val endTimestamp: Long? = null
+        val endTimestamp: Long? = null,
+        // Optional metadata for remote/non-local tracks
+        val title: String? = null,
+        val artist: String? = null,
+        val album: String? = null,
+        val albumArtUri: String? = null
     )
 
     data class PlaybackHistoryEntry(
@@ -166,7 +171,8 @@ class PlaybackStatsRepository @Inject constructor(
     suspend fun recordPlayback(
         songId: String,
         durationMs: Long,
-        timestamp: Long = System.currentTimeMillis()
+        timestamp: Long = System.currentTimeMillis(),
+        song: Song? = null
     ) = withContext(Dispatchers.IO) {
         if (songId.isBlank()) return@withContext
         val coercedTimestamp = timestamp.coerceAtLeast(0L)
@@ -177,7 +183,11 @@ class PlaybackStatsRepository @Inject constructor(
             timestamp = coercedTimestamp,
             durationMs = coercedDuration,
             startTimestamp = start,
-            endTimestamp = coercedTimestamp
+            endTimestamp = coercedTimestamp,
+            title = song?.title,
+            artist = song?.displayArtist,
+            album = song?.album,
+            albumArtUri = song?.albumArtUriString
         )
         val writeSucceeded = updateEventsAtomically { events ->
             val cutoff = sanitizedEvent.endMillis() - MAX_HISTORY_AGE_MS
@@ -240,9 +250,8 @@ class PlaybackStatsRepository @Inject constructor(
         }
 
         val songMap = songs.associateBy { it.id }
-        val normalizedEvents = filteredEvents
 
-        val segmentsBySong = normalizedEvents
+        val segmentsBySong = filteredEvents
             .groupBy { it.songId }
             .mapValues { (_, eventsForSong) -> mergeSongEvents(eventsForSong) }
 
@@ -250,7 +259,7 @@ class PlaybackStatsRepository @Inject constructor(
 
         val effectiveStart = startBound
             ?: overallSpans.minOfOrNull { it.startMillis }
-            ?: normalizedEvents.minOfOrNull { it.startMillis() }
+            ?: filteredEvents.minOfOrNull { it.startMillis() }
             ?: allEvents.minOfOrNull { it.startMillis() }
         val effectiveEnd = overallSpans.maxOfOrNull { it.endMillis } ?: endBound
 
@@ -260,15 +269,25 @@ class PlaybackStatsRepository @Inject constructor(
 
         val allSongs = segmentsBySong
             .mapNotNull { (songId, segmentsForSong) ->
-                val song = songMap[songId] ?: return@mapNotNull null
-                val title = song.title.takeIf { it.isNotBlank() }
-                    ?: song.path.substringAfterLast('/').ifBlank { return@mapNotNull null }
-                val artist = song.displayArtist.takeIf { it.isNotBlank() } ?: "Unknown Artist"
+                val song = songMap[songId]
+                val latestEvent = filteredEvents.findLast { it.songId == songId }
+
+                val title = song?.title?.takeIf { it.isNotBlank() }
+                    ?: song?.path?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
+                    ?: latestEvent?.title?.takeIf { it.isNotBlank() }
+                    ?: return@mapNotNull null
+
+                val artist = song?.displayArtist?.takeIf { it.isNotBlank() }
+                    ?: latestEvent?.artist?.takeIf { it.isNotBlank() }
+                    ?: "Unknown Artist"
+                    
+                val albumArtUri = song?.albumArtUriString ?: latestEvent?.albumArtUri
+
                 SongPlaybackSummary(
                     songId = songId,
                     title = title,
                     artist = artist,
-                    albumArtUri = song.albumArtUriString,
+                    albumArtUri = albumArtUri,
                     totalDurationMs = segmentsForSong.sumOf { it.durationMs },
                     playCount = segmentsForSong.size
                 )
@@ -355,7 +374,18 @@ class PlaybackStatsRepository @Inject constructor(
 
         val topArtists = segmentsBySong.entries
             .flatMap { (songId, segmentsForSong) ->
-                statsArtistNames(songMap[songId]).map { artist ->
+                val song = songMap[songId]
+                val latestEvent = filteredEvents.findLast { it.songId == songId }
+                
+                val artistNames = if (song != null) {
+                    statsArtistNames(song)
+                } else if (latestEvent?.artist?.isNotBlank() == true) {
+                    listOf(latestEvent.artist)
+                } else {
+                    listOf("Unknown Artist")
+                }
+                
+                artistNames.map { artist ->
                     ArtistSongPlayback(
                         artist = artist,
                         songId = songId,
@@ -386,18 +416,24 @@ class PlaybackStatsRepository @Inject constructor(
         val topAlbums = segmentsBySong.entries
             .groupBy { (songId, _) ->
                 val song = songMap[songId]
-                song?.album?.takeIf { it.isNotBlank() } ?: "Unknown Album"
+                val latestEvent = filteredEvents.findLast { it.songId == songId }
+                song?.album?.takeIf { it.isNotBlank() } ?: latestEvent?.album?.takeIf { it.isNotBlank() } ?: "Unknown Album"
             }
             .map { (album, groupedSongs) ->
                 val flattened = groupedSongs.flatMap { it.value }
                 val uniqueSongCount = groupedSongs.size
-                val firstSong = groupedSongs
-                    .asSequence()
-                    .mapNotNull { songMap[it.key] }
-                    .firstOrNull()
+                
+                var albumArtUri: String? = null
+                for ((sId, _) in groupedSongs) {
+                    val song = songMap[sId]
+                    val ev = filteredEvents.findLast { it.songId == sId }
+                    albumArtUri = song?.albumArtUriString ?: ev?.albumArtUri
+                    if (albumArtUri != null) break
+                }
+                
                 AlbumPlaybackSummary(
                     album = album,
-                    albumArtUri = firstSong?.albumArtUriString,
+                    albumArtUri = albumArtUri,
                     totalDurationMs = flattened.sumOf { it.durationMs },
                     playCount = flattened.size,
                     uniqueSongs = uniqueSongCount

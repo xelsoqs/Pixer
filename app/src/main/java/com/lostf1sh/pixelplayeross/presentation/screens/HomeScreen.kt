@@ -60,7 +60,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
@@ -69,7 +68,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontVariation
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -87,8 +85,6 @@ import com.lostf1sh.pixelplayeross.data.preferences.CollagePattern
 import com.lostf1sh.pixelplayeross.presentation.components.AlbumArtCollage
 import com.lostf1sh.pixelplayeross.presentation.components.BetaInfoBottomSheet
 import com.lostf1sh.pixelplayeross.presentation.components.ChangelogBottomSheet
-import com.lostf1sh.pixelplayeross.presentation.jellyfin.dashboard.JellyfinDashboardViewModel
-import com.lostf1sh.pixelplayeross.presentation.navidrome.dashboard.NavidromeDashboardViewModel
 import com.lostf1sh.pixelplayeross.presentation.components.DailyMixSection
 import com.lostf1sh.pixelplayeross.presentation.components.HomeGradientTopBar
 import com.lostf1sh.pixelplayeross.presentation.components.HomeOptionsBottomSheet
@@ -102,7 +98,6 @@ import com.lostf1sh.pixelplayeross.presentation.model.collectRecentlyPlayedSongI
 import com.lostf1sh.pixelplayeross.presentation.model.mapRecentlyPlayedSongs
 import com.lostf1sh.pixelplayeross.presentation.components.subcomps.PlayingEqIcon
 import com.lostf1sh.pixelplayeross.presentation.navigation.Screen
-import com.lostf1sh.pixelplayeross.presentation.components.StreamingProviderSheet
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.PlayerViewModel
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.SettingsViewModel
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.StatsViewModel
@@ -115,6 +110,19 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import androidx.compose.ui.res.stringResource
+import androidx.compose.runtime.collectAsState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.clickable
+import coil.compose.AsyncImage
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.width
+import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerTrack
+import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerPlaylist
+import com.lostf1sh.pixelplayeross.presentation.screens.mapDeezerTrackToSong
 
 private const val HomeLoadingPlaceholderMinDurationMillis = 1200L
 
@@ -127,8 +135,7 @@ fun HomeScreen(
     paddingValuesParent: PaddingValues,
     playerViewModel: PlayerViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
-    navidromeViewModel: NavidromeDashboardViewModel = hiltViewModel(),
-    jellyfinViewModel: JellyfinDashboardViewModel = hiltViewModel(),
+    libraryViewModel: com.lostf1sh.pixelplayeross.presentation.viewmodel.LibraryViewModel = hiltViewModel(),
     onOpenSidebar: () -> Unit
 ) {
     val context = LocalContext.current
@@ -143,6 +150,13 @@ fun HomeScreen(
     val homeMixPreviewSongs by playerViewModel.homeMixPreviewSongs.collectAsStateWithLifecycle()
     val playbackHistory by playerViewModel.playbackHistory.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    val flowConfigsState by libraryViewModel.deezerFlowConfigs.collectAsState()
+    val playlists by libraryViewModel.deezerRecommendedPlaylists.collectAsState()
+    val flowConfigs = flowConfigsState?.data?.included ?: emptyList()
+    val recommendedPlaylists = playlists?.data?.included ?: emptyList()
+    val coroutineScope = rememberCoroutineScope()
+
 
     val usesFallbackHomeMix = remember(curatedYourMixSongs, dailyMixSongs) {
         curatedYourMixSongs.isEmpty() && dailyMixSongs.isEmpty()
@@ -322,6 +336,28 @@ fun HomeScreen(
                 )
             }
         ) { innerPadding ->
+            val collagesongs = remember(yourMixSongs) {
+                if (yourMixSongs.isNotEmpty()) yourMixSongs
+                else {
+                    (1..6).map { i ->
+                        Song(
+                            id = "placeholder_$i",
+                            title = "Track $i",
+                            artist = "Artist $i",
+                            artistId = 0L,
+                            album = "Album $i",
+                            albumId = 0L,
+                            path = "",
+                            contentUriString = "",
+                            albumArtUriString = null,
+                            duration = 0L,
+                            mimeType = null,
+                            bitrate = null,
+                            sampleRate = null
+                        )
+                    }
+                }
+            }
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -334,7 +370,71 @@ fun HomeScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(24.dp)
             ) {
-                if (yourMixSongs.isEmpty()) {
+                if (flowConfigs.isNotEmpty()) {
+                    item(
+                        key = "deezer_flow_header",
+                        contentType = "deezer_flow_header"
+                    ) {
+                        Text(
+                            text = "Flow",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    item(
+                        key = "deezer_flow_list",
+                        contentType = "deezer_flow_list"
+                    ) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(flowConfigs, key = { it.id }) { config ->
+                                DeezerHomeFlowConfigItem(config = config, onClick = {
+                                    coroutineScope.launch {
+                                        val flowTracksResponse = libraryViewModel.getMultiFlowTracks(config.links?.self ?: return@launch)
+                                        val flowTracksList = flowTracksResponse?.data?.included?.filter { it.type == "track" } ?: emptyList()
+                                        if (flowTracksList.isNotEmpty()) {
+                                            val song = mapDeezerTrackToSong(flowTracksList.first())
+                                            val songsToPlay = flowTracksList.map { mapDeezerTrackToSong(it) }
+                                            playerViewModel.playSongs(songsToPlay, song, config.attributes?.title ?: "Flow", null, config.links?.self)
+                                        }
+                                    }
+                                })
+                            }
+                        }
+                    }
+                }
+
+                if (recommendedPlaylists.isNotEmpty()) {
+                    item(
+                        key = "deezer_playlists_header",
+                        contentType = "deezer_playlists_header"
+                    ) {
+                        Text(
+                            text = "Recommended Playlists",
+                            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                    }
+                    item(
+                        key = "deezer_playlists_list",
+                        contentType = "deezer_playlists_list"
+                    ) {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            items(recommendedPlaylists, key = { it.id }) { playlist ->
+                                DeezerHomePlaylistItem(playlist = playlist, onClick = {
+                                    navController.navigate(Screen.PlaylistDetail.createRoute("deezer_${playlist.id}"))
+                                })
+                            }
+                        }
+                    }
+                }
+
+                if (yourMixSongs.isEmpty() && flowConfigs.isEmpty() && recommendedPlaylists.isEmpty()) {
                     item(
                         key = "your_mix_placeholder",
                         contentType = "your_mix_placeholder"
@@ -351,15 +451,18 @@ fun HomeScreen(
                             )
                         }
                     }
-                } else {
-                    item(
-                        key = "your_mix_header",
-                        contentType = "your_mix_header"
-                    ) {
-                        YourMixHeader(
-                            song = yourMixSong,
-                            isShuffleEnabled = isShuffleEnabled,
-                            onPlayShuffled = {
+                }
+
+
+                item(
+                    key = "your_mix_header",
+                    contentType = "your_mix_header"
+                ) {
+                    YourMixHeader(
+                        song = yourMixSong,
+                        isShuffleEnabled = isShuffleEnabled,
+                        onPlayShuffled = {
+                            if (yourMixSongs.isNotEmpty()) {
                                 if (usesFallbackHomeMix) {
                                     playerViewModel.shuffleAllSongs(queueName = "Your Mix")
                                 } else {
@@ -370,45 +473,45 @@ fun HomeScreen(
                                     )
                                 }
                             }
-                        )
-                    }
+                        }
+                    )
                 }
 
                 // Collage
-                if (yourMixSongs.isNotEmpty()) {
-                    item(
-                        key = "album_art_collage",
-                        contentType = "album_art_collage"
-                    ) {
-                        val basePattern = settingsUiState.collagePattern
-                        val isAutoRotate = settingsUiState.collageAutoRotate
-                        val patterns = remember { CollagePattern.entries }
+                item(
+                    key = "album_art_collage",
+                    contentType = "album_art_collage"
+                ) {
+                    val basePattern = settingsUiState.collagePattern
+                    val isAutoRotate = settingsUiState.collageAutoRotate
+                    val patterns = remember { CollagePattern.entries }
 
-                        val activePattern = if (isAutoRotate) {
-                            var rotationIndex by rememberSaveable { mutableIntStateOf(-1) }
-                            LaunchedEffect(Unit) { rotationIndex++ }
-                            remember(rotationIndex) {
-                                patterns[rotationIndex.coerceAtLeast(0) % patterns.size]
-                            }
-                        } else {
-                            basePattern
+                    val activePattern = if (isAutoRotate) {
+                        var rotationIndex by rememberSaveable { mutableIntStateOf(-1) }
+                        LaunchedEffect(Unit) { rotationIndex++ }
+                        remember(rotationIndex) {
+                            patterns[rotationIndex.coerceAtLeast(0) % patterns.size]
                         }
+                    } else {
+                        basePattern
+                    }
 
-                        AlbumArtCollage(
-                            modifier = Modifier.fillMaxWidth(),
-                            songs = yourMixSongs,
-                            padding = 14.dp,
-                            height = 400.dp,
-                            pattern = activePattern,
-                            onSongClick = { song ->
+                    AlbumArtCollage(
+                        modifier = Modifier.fillMaxWidth(),
+                        songs = collagesongs.toImmutableList(),
+                        padding = 14.dp,
+                        height = 400.dp,
+                        pattern = activePattern,
+                        onSongClick = { song ->
+                            if (yourMixSongs.isNotEmpty()) {
                                 if (usesFallbackHomeMix) {
                                     playerViewModel.showAndPlaySongFromLibrary(song, queueName = "Your Mix")
                                 } else {
                                     playerViewModel.showAndPlaySong(song, yourMixSongs, "Your Mix")
                                 }
                             }
-                        )
-                    }
+                        }
+                    )
                 }
 
                 // Daily Mix
@@ -537,21 +640,6 @@ fun HomeScreen(
         ) {
             BetaInfoBottomSheet()
         }
-    }
-    if (showStreamingProviderSheet) {
-        val isNavidromeLoggedIn by navidromeViewModel.isLoggedIn.collectAsStateWithLifecycle()
-        val isJellyfinLoggedIn by jellyfinViewModel.isLoggedIn.collectAsStateWithLifecycle()
-        StreamingProviderSheet(
-            onDismissRequest = { showStreamingProviderSheet = false },
-            isNavidromeLoggedIn = isNavidromeLoggedIn,
-            onNavigateToNavidromeDashboard = {
-                navController.navigateSafely(Screen.NavidromeDashboard.route)
-            },
-            isJellyfinLoggedIn = isJellyfinLoggedIn,
-            onNavigateToJellyfinDashboard = {
-                navController.navigateSafely(Screen.JellyfinDashboard.route)
-            }
-        )
     }
 }
 
@@ -852,6 +940,95 @@ private fun rememberYourMixTitleStyle(): TextStyle {
             fontWeight = FontWeight(760),
             fontSize = 64.sp,
             lineHeight = 62.sp
+        )
+    }
+}
+
+@Composable
+fun DeezerHomeTrackItem(track: DeezerTrack, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(130.dp)
+            .clickable(onClick = onClick)
+    ) {
+        val imageUrl = track.attributes?.image?.medium ?: track.attributes?.image?.small ?: track.attributes?.image?.tiny
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = "Track Artwork",
+            modifier = Modifier
+                .size(130.dp)
+                .clip(RoundedCornerShape(8.dp)),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = track.attributes?.title ?: "Unknown Track",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = track.attributes?.artistName ?: "Unknown Artist",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+fun DeezerHomeFlowConfigItem(config: com.lostf1sh.pixelplayeross.data.network.deezer.DeezerMultiFlowConfig, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(130.dp)
+            .clickable(onClick = onClick)
+    ) {
+        val imageUrl = config.attributes?.images?.square?.medium ?: config.attributes?.images?.square?.small
+        AsyncImage(
+            model = imageUrl,
+            contentDescription = "Flow Artwork",
+            modifier = Modifier
+                .size(130.dp)
+                .clip(CircleShape),
+            contentScale = ContentScale.Crop
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = config.attributes?.title ?: "Flow",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.align(Alignment.CenterHorizontally)
+        )
+    }
+}
+
+@Composable
+fun DeezerHomePlaylistItem(playlist: DeezerPlaylist, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .width(140.dp)
+            .clickable { onClick() }
+    ) {
+        AsyncImage(
+            model = playlist.attributes?.image?.medium ?: playlist.attributes?.image?.small,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(140.dp)
+                .clip(AbsoluteSmoothCornerShape(16.dp, 60))
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = playlist.attributes?.name ?: "Unknown",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            minLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
         )
     }
 }

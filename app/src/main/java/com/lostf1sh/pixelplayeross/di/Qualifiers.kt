@@ -9,6 +9,10 @@ import javax.inject.Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class DeezerRetrofit
 
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class DeezerConnectRetrofit
+
 /**
  * Qualifier for Fast OkHttpClient (Short timeouts).
  */

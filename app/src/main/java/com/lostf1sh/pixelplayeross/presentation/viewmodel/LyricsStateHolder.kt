@@ -3,7 +3,6 @@ package com.lostf1sh.pixelplayeross.presentation.viewmodel
 import com.lostf1sh.pixelplayeross.R
 import com.lostf1sh.pixelplayeross.data.media.AudioMetadataReader
 import com.lostf1sh.pixelplayeross.data.media.CoverArtUpdate
-import com.lostf1sh.pixelplayeross.data.media.SongMetadataEditor
 import com.lostf1sh.pixelplayeross.data.model.Lyrics
 import com.lostf1sh.pixelplayeross.data.model.LyricsSourcePreference
 import com.lostf1sh.pixelplayeross.data.model.Song
@@ -47,8 +46,7 @@ interface LyricsLoadCallback {
 @Singleton
 class LyricsStateHolder @Inject constructor(
     private val musicRepository: MusicRepository,
-    private val userPreferencesRepository: UserPreferencesRepository,
-    private val songMetadataEditor: SongMetadataEditor
+    private val userPreferencesRepository: UserPreferencesRepository
 ) {
     private var scope: CoroutineScope? = null
     private var loadingJob: Job? = null
@@ -249,16 +247,7 @@ class LyricsStateHolder @Inject constructor(
                         _songUpdates.emit(updatedSong to lyrics)
                     }
                     .onFailure { error ->
-                        if (error is NoLyricsFoundException) {
-                            // Fallback to search
-                            musicRepository.searchRemoteLyrics(song)
-                                .onSuccess { (query, results) ->
-                                    _searchUiState.value = LyricsSearchUiState.PickResult(query, results)
-                                }
-                                .onFailure { searchError -> handleError(searchError) }
-                        } else {
-                            handleError(error)
-                        }
+                        handleError(error)
                     }
             }
         }
@@ -397,19 +386,8 @@ class LyricsStateHolder @Inject constructor(
                 )
             }
 
-            runCatching {
-                songMetadataEditor.editSongMetadata(
-                    songId = songId,
-                    newTitle = song.title,
-                    newArtist = song.artist,
-                    newAlbum = song.album,
-                    newGenre = song.genre ?: "",
-                    newLyrics = normalizedLyrics,
-                    newTrackNumber = song.trackNumber,
-                    newDiscNumber = song.discNumber,
-                    coverArtUpdate = coverArtUpdate
-                )
-            }.getOrNull()?.updatedAlbumArtUri
+            musicRepository.updateLyrics(songId.toLong(), normalizedLyrics)
+            null
         }
     }
 

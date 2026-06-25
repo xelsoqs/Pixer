@@ -45,6 +45,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -53,7 +54,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.resume
 
-import com.lostf1sh.pixelplayeross.data.navidrome.NavidromeStreamProxy
 
 data class ActiveDecoderInfo(
     val name: String,
@@ -169,8 +169,8 @@ internal fun shouldDisableAudioOffloadOnEarlyBuffering(
 @Singleton
 class DualPlayerEngine @Inject constructor(
     @param:ApplicationContext private val context: Context,
-    private val navidromeStreamProxy: NavidromeStreamProxy,
-    private val jellyfinStreamProxy: com.lostf1sh.pixelplayeross.data.jellyfin.JellyfinStreamProxy
+    private val deezerRepository: dagger.Lazy<com.lostf1sh.pixelplayeross.data.repository.DeezerRepository>,
+    private val userPreferencesRepository: com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository
 ) {
     private companion object {
         private const val AUDIO_OFFLOAD_STALL_FALLBACK_MS = 4_000L
@@ -185,7 +185,7 @@ class DualPlayerEngine @Inject constructor(
         private val REMOTE_MEDIA_SCHEMES = setOf("http", "https", "navidrome", "jellyfin")
         // Subset of REMOTE_MEDIA_SCHEMES: schemes that need proxy resolution.
         // http/https resolve directly and must NOT enter the resolvedUriCache lookup path.
-        private val CLOUD_PROXY_SCHEMES = setOf("navidrome", "jellyfin")
+        private val CLOUD_PROXY_SCHEMES = setOf("navidrome", "jellyfin", "deezer")
     }
 
     data class TransitionTarget(
@@ -295,8 +295,12 @@ class DualPlayerEngine @Inject constructor(
                 lastPlayWhenReadyAtMs = SystemClock.elapsedRealtime()
                 requestAudioFocus()
                 scheduleAudioOffloadFallbackIfNeeded(playerA)
+                if (transitionRunning) playerB?.playWhenReady = true
             } else {
                 cancelAudioOffloadFallback()
+                if (transitionRunning && reason != Player.PLAY_WHEN_READY_CHANGE_REASON_END_OF_MEDIA_ITEM) {
+                    playerB?.playWhenReady = false
+                }
                 // Keep focus across user pauses so a quick resume doesn't have to re-acquire it.
                 // Focus is abandoned explicitly on AUDIOFOCUS_LOSS and on release(); anything in
                 // between (user pause/play) keeps the request alive to avoid contention races
@@ -804,7 +808,7 @@ class DualPlayerEngine @Inject constructor(
                 .setBufferDurationsMs(
                     /* minBufferMs                      */ 15_000,
                     /* maxBufferMs                      */ 30_000,
-                    /* bufferForPlaybackMs              */  2_500,
+                    /* bufferForPlaybackMs              */  1_000,
                     /* bufferForPlaybackAfterRebufferMs */  5_000
                 )
                 .setPrioritizeTimeOverSizeThresholds(true)
@@ -814,7 +818,7 @@ class DualPlayerEngine @Inject constructor(
                 .setBufferDurationsMs(
                     /* minBufferMs                      */ 30_000,
                     /* maxBufferMs                      */ 60_000,
-                    /* bufferForPlaybackMs              */  2_500,
+                    /* bufferForPlaybackMs              */  1_000,
                     /* bufferForPlaybackAfterRebufferMs */  5_000
                 )
                 .setPrioritizeTimeOverSizeThresholds(true)
@@ -947,17 +951,25 @@ class DualPlayerEngine @Inject constructor(
     }
 
     private fun resolveReadyCloudProxyUri(uri: Uri): Uri? {
-        val uriString = uri.toString()
-        val proxyUrl = when (uri.scheme) {
-            "navidrome" -> navidromeStreamProxy
-                .takeIf { it.isReady() }
-                ?.resolveNavidromeUri(uriString)
-            "jellyfin" -> jellyfinStreamProxy
-                .takeIf { it.isReady() }
-                ?.resolveJellyfinUri(uriString)
-            else -> null
+        if (uri.scheme == "deezer" && uri.host == "track") {
+            val trackId = uri.pathSegments.firstOrNull()?.toLongOrNull() ?: return null
+            val qualityOverride = uri.getQueryParameter("quality")?.let { 
+                runCatching { com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality.valueOf(it) }.getOrNull()
+            }
+            return kotlinx.coroutines.runBlocking {
+                val quality = qualityOverride ?: userPreferencesRepository.deezerAudioQualityFlow.first()
+                val response = deezerRepository.get().getStreamUrls(trackId)
+                val streamUrls = response?.data?.attributes
+                val url = when (quality) {
+                    com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality.HIFI -> streamUrls?.urlFlac ?: streamUrls?.url320 ?: streamUrls?.url
+                    com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality.HIGH -> streamUrls?.url320 ?: streamUrls?.url
+                    com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality.STANDARD -> streamUrls?.url
+                    else -> streamUrls?.url
+                }
+                url?.let { Uri.parse(it) }
+            }
         }
-        return proxyUrl?.let(Uri::parse)
+        return null
     }
 
     private fun getOrCreateAuxiliaryPlayer(): ExoPlayer {
@@ -1008,29 +1020,7 @@ class DualPlayerEngine @Inject constructor(
         val uriString = uri.toString()
         resolvedUriCache.get(uriString)?.let { return@withContext it }
 
-        val resolved: Uri? = when (uri.scheme) {
-            "navidrome" -> resolveNavidromeUriAsync(uriString)
-            "jellyfin" -> resolveJellyfinUriAsync(uriString)
-            else -> null
-        }
-
-        if (resolved != null) {
-            resolvedUriCache.put(uriString, resolved)
-            return@withContext resolved
-        }
         uri
-    }
-
-    private suspend fun resolveNavidromeUriAsync(uriString: String): Uri? = withContext(Dispatchers.IO) {
-        if (!navidromeStreamProxy.ensureReady(5_000L)) return@withContext null
-        navidromeStreamProxy.warmUpStreamUrl(uriString)
-        navidromeStreamProxy.resolveNavidromeUri(uriString)?.let { Uri.parse(it) }
-    }
-
-    private suspend fun resolveJellyfinUriAsync(uriString: String): Uri? = withContext(Dispatchers.IO) {
-        if (!jellyfinStreamProxy.ensureReady(5_000L)) return@withContext null
-        jellyfinStreamProxy.warmUpStreamUrl(uriString)
-        jellyfinStreamProxy.resolveJellyfinUri(uriString)?.let { Uri.parse(it) }
     }
 
     suspend fun resolveMediaItem(mediaItem: MediaItem): MediaItem {
@@ -1148,6 +1138,8 @@ class DualPlayerEngine @Inject constructor(
             return
         }
 
+        val waitStartMs = SystemClock.elapsedRealtime()
+
         if (auxiliaryPlayer.playbackState == Player.STATE_IDLE) auxiliaryPlayer.prepare()
         if (auxiliaryPlayer.playbackState == Player.STATE_BUFFERING) {
             if (!awaitPlayerReady(auxiliaryPlayer, 3000L)) {
@@ -1156,6 +1148,8 @@ class DualPlayerEngine @Inject constructor(
                 return
             }
         }
+
+        val waitElapsedMs = SystemClock.elapsedRealtime() - waitStartMs
 
         val outgoingStartVolume = playerA.volume.coerceIn(0f, 1f)
         auxiliaryPlayer.volume = 0f
@@ -1172,12 +1166,32 @@ class DualPlayerEngine @Inject constructor(
         incomingPlayer.pauseAtEndOfMediaItems = false
         onTransitionDisplayPlayerListeners.forEach { it(incomingPlayer) }
 
-        val duration = settings.durationMs.toLong().coerceAtLeast(500L)
+        val duration = (settings.durationMs.toLong() - waitElapsedMs).coerceAtLeast(500L)
         val stepMs = 32L
-        val startedAtMs = SystemClock.elapsedRealtime()
+        
+        var accumulatedElapsedMs = 0L
+        var lastTickMs = SystemClock.elapsedRealtime()
+        var wasIncomingPlaying = incomingPlayer.playWhenReady
 
         while (true) {
-            val elapsed = (SystemClock.elapsedRealtime() - startedAtMs).coerceAtMost(duration)
+            val nowMs = SystemClock.elapsedRealtime()
+            val deltaMs = nowMs - lastTickMs
+            lastTickMs = nowMs
+
+            val isIncomingPlaying = incomingPlayer.playWhenReady
+            if (isIncomingPlaying != wasIncomingPlaying) {
+                // User toggled play/pause via incomingPlayer
+                if (outgoingPlayer.playbackState != Player.STATE_ENDED) {
+                    outgoingPlayer.playWhenReady = isIncomingPlaying
+                }
+                wasIncomingPlaying = isIncomingPlaying
+            }
+
+            if (incomingPlayer.playWhenReady) {
+                accumulatedElapsedMs += deltaMs
+            }
+
+            val elapsed = accumulatedElapsedMs.coerceAtMost(duration)
             val progress = (elapsed.toFloat() / duration).coerceIn(0f, 1f)
             val volIn = envelope(progress, settings.curveIn)
             val volOut = 1f - envelope(progress, settings.curveOut)
@@ -1185,7 +1199,7 @@ class DualPlayerEngine @Inject constructor(
             incomingPlayer.volume = (volIn * incomingTarget).coerceIn(0f, 1f)
             outgoingPlayer.volume = (volOut * outgoingStartVolume).coerceIn(0f, 1f)
 
-            if (elapsed >= duration) break
+            if (accumulatedElapsedMs >= duration) break
             delay(stepMs)
         }
 

@@ -133,16 +133,13 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import com.lostf1sh.pixelplayeross.R
-import com.lostf1sh.pixelplayeross.data.backup.model.BackupSection
-import com.lostf1sh.pixelplayeross.data.backup.model.BackupTransferProgressUpdate
-import com.lostf1sh.pixelplayeross.data.backup.model.RestorePlan
 import com.lostf1sh.pixelplayeross.data.preferences.AppThemeMode
 import com.lostf1sh.pixelplayeross.presentation.components.PermissionIconCollage
-import com.lostf1sh.pixelplayeross.presentation.components.BackupModuleSelectionDialog
 import com.lostf1sh.pixelplayeross.presentation.components.subcomps.MaterialYouVectorDrawable
 import com.lostf1sh.pixelplayeross.presentation.components.subcomps.SineWaveLine
 import com.lostf1sh.pixelplayeross.presentation.components.FileExplorerDialog
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.DirectoryEntry
+import com.lostf1sh.pixelplayeross.presentation.viewmodel.DeezerLoginStatus
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.SetupEvent
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.SetupUiState
 import com.lostf1sh.pixelplayeross.presentation.viewmodel.SetupViewModel
@@ -181,14 +178,7 @@ fun SetupScreen(
     var selectedBackupUri by remember { mutableStateOf<Uri?>(null) }
     
     var showCornerRadiusOverlay by remember { mutableStateOf(false) }
-    val backupPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        selectedBackupUri = uri
-        if (uri != null) {
-            setupViewModel.inspectBackupFile(uri)
-        }
-    }
+
 
     // Re-check permissions when the screen is resumed
     DisposableEffect(lifecycleOwner) {
@@ -230,16 +220,7 @@ fun SetupScreen(
                 is SetupEvent.Message -> {
                     Toast.makeText(context, event.value, Toast.LENGTH_LONG).show()
                 }
-                is SetupEvent.RestoreCompleted -> {
-                    Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
-                    val targetPageIndex = finishPageIndex.takeIf { it >= 0 }
 
-                    if (targetPageIndex != null) {
-                        pagerState.animateScrollToPage(targetPageIndex)
-                    } else {
-                        onSetupComplete()
-                    }
-                }
             }
         }
     }
@@ -323,42 +304,16 @@ fun SetupScreen(
             ) {
                 when (page) {
                     SetupPage.Welcome -> WelcomePage()
-                    SetupPage.MediaPermission -> MediaPermissionPage(
+                    SetupPage.DeezerAuth -> DeezerAuthPage(
                         uiState = uiState,
-                        onPermissionStateUpdated = { setupViewModel.checkPermissions(context) }
-                    )
-                    SetupPage.BackupRestore -> BackupRestorePage(
-                        uiState = uiState,
-                        onImportClicked = { backupPickerLauncher.launch("*/*") },
-                        onSkip = {
-                            setupViewModel.clearRestorePlan()
-                            selectedBackupUri = null
+                        onStartLogin = setupViewModel::startDeezerLogin,
+                        onCancel = setupViewModel::cancelDeezerLogin,
+                        onContinue = {
                             navigateToPage(pagerState.currentPage + 1)
                         }
                     )
-                    SetupPage.DirectorySelection -> DirectorySelectionPage(
-                        uiState = uiState,
-                        currentPath = currentPath,
-                        directoryChildren = directoryChildren,
-                        availableStorages = availableStorages,
-                        selectedStorageIndex = selectedStorageIndex,
-                        isExplorerPriming = isExplorerPriming,
-                        isExplorerReady = isExplorerReady,
-                        isCurrentDirectoryResolved = isCurrentDirectoryResolved,
-                        isAtRoot = setupViewModel.isAtRoot(),
-                        explorerRoot = setupViewModel.explorerRoot(),
-                        onOpenExplorer = setupViewModel::openExplorer,
-                        onNavigateTo = setupViewModel::loadDirectory,
-                        onNavigateUp = setupViewModel::navigateUp,
-                        onRefresh = setupViewModel::refreshCurrentDirectory,
-                        onPrimeExplorer = setupViewModel::primeExplorer,
-                        onSkip = {
-                            navigateToPage(pagerState.currentPage + 1)
-                        },
-                        onToggleAllowed = setupViewModel::toggleDirectoryAllowed,
-                        onSelectionFinished = setupViewModel::applyPendingDirectoryRuleChanges,
-                        onStorageSelected = setupViewModel::selectStorage
-                    )
+
+                    SetupPage.DirectorySelection -> { /* Removed */ }
                     SetupPage.NotificationsPermission -> NotificationsPermissionPage(
                         uiState = uiState,
                         onPermissionStateUpdated = { setupViewModel.checkPermissions(context) }
@@ -373,11 +328,7 @@ fun SetupScreen(
                         uiState = uiState,
                         onModeSelected = setupViewModel::setAppThemeMode
                     )
-                    SetupPage.ExternalServices -> ExternalServicesPage(
-                        uiState = uiState,
-                        onExternalLyricsChanged = setupViewModel::setExternalLyricsEnabled,
-                        onExternalArtistImagesChanged = setupViewModel::setExternalArtistImagesEnabled
-                    )
+                    SetupPage.ExternalServices -> { /* Removed */ }
                     SetupPage.Finish -> FinishPage()
                     SetupPage.LibraryLayout -> LibraryLayoutPage(
                         uiState = uiState,
@@ -399,27 +350,7 @@ fun SetupScreen(
         }
     }
 
-    val restorePlan = uiState.restorePlan
-    if (restorePlan != null && selectedBackupUri != null) {
-        BackupModuleSelectionDialog(
-            plan = restorePlan,
-            inProgress = uiState.isRestoringBackup,
-            onDismiss = {
-                setupViewModel.clearRestorePlan()
-                selectedBackupUri = null
-            },
-            onBack = {
-                setupViewModel.clearRestorePlan()
-                selectedBackupUri = null
-            },
-            onSelectionChanged = setupViewModel::updateRestorePlanSelection,
-            onConfirm = {
-                val uri = selectedBackupUri ?: return@BackupModuleSelectionDialog
-                selectedBackupUri = null
-                setupViewModel.restoreFromPlan(uri)
-            }
-        )
-    }
+
 
     // Overlay for Corner Radius Customization
     AnimatedVisibility(
@@ -532,8 +463,8 @@ fun DirectorySelectionPage(
 
 sealed class SetupPage {
     object Welcome : SetupPage()
-    object MediaPermission : SetupPage()
-    object BackupRestore : SetupPage()
+    object DeezerAuth : SetupPage()
+
     object DirectorySelection : SetupPage()
     object ExternalServices : SetupPage()
     object ThemeSelection : SetupPage()
@@ -547,16 +478,13 @@ sealed class SetupPage {
 private fun buildSetupPages(sdkInt: Int): List<SetupPage> {
     val pages = mutableListOf<SetupPage>(
         SetupPage.Welcome,
-        SetupPage.MediaPermission
+        SetupPage.DeezerAuth
     )
 
     if (sdkInt >= Build.VERSION_CODES.TIRAMISU) {
         pages += SetupPage.NotificationsPermission
     }
 
-    pages += SetupPage.BackupRestore
-    pages += SetupPage.DirectorySelection
-    pages += SetupPage.ExternalServices
     pages += SetupPage.ThemeSelection
     pages += SetupPage.LibraryLayout
     pages += SetupPage.NavBarLayout
@@ -588,8 +516,8 @@ private fun isPermissionGateSatisfied(
     uiState: SetupUiState
 ): Boolean {
     return when (page) {
-        SetupPage.MediaPermission -> {
-            uiState.mediaPermissionGranted || hasMediaPermissionNow(context)
+        SetupPage.DeezerAuth -> {
+            uiState.deezerLoggedIn
         }
         SetupPage.NotificationsPermission -> {
             uiState.notificationsPermissionGranted ||
@@ -604,14 +532,13 @@ private fun isPermissionGateSatisfied(
 }
 
 private fun allRequiredPermissionsGrantedNow(context: Context): Boolean {
-    val mediaGranted = hasMediaPermissionNow(context)
     val notificationsGranted =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
             ContextCompat.checkSelfPermission(
                 context,
                 Manifest.permission.POST_NOTIFICATIONS
             ) == PackageManager.PERMISSION_GRANTED
-    return mediaGranted && notificationsGranted
+    return notificationsGranted
 }
 
 private fun hasMediaPermissionNow(context: Context): Boolean {
@@ -746,6 +673,165 @@ fun WelcomePage() {
     }
 }
 
+@Composable
+fun DeezerAuthPage(
+    uiState: SetupUiState,
+    onStartLogin: () -> Unit,
+    onCancel: () -> Unit,
+    onContinue: () -> Unit
+) {
+    val context = LocalContext.current
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceBetween,
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(modifier = Modifier.height(24.dp))
+            Text(
+                text = "Sign in to Deezer",
+                style = MaterialTheme.typography.displayMedium.copy(
+                    fontFamily = RoundedSans,
+                    fontSize = 32.sp
+                ),
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+            Text(
+                text = "Connect your Deezer account to stream music.",
+                style = MaterialTheme.typography.bodyLarge,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            when (uiState.deezerLoginStatus) {
+                DeezerLoginStatus.IDLE -> {
+                    Button(
+                        onClick = onStartLogin,
+                        modifier = Modifier.fillMaxWidth(0.7f)
+                    ) {
+                        Text("Sign in with Deezer")
+                    }
+                }
+                DeezerLoginStatus.REQUESTING -> {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth(0.6f))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Requesting login code...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DeezerLoginStatus.WAITING_FOR_USER, DeezerLoginStatus.POLLING -> {
+                    val url = uiState.deezerAuthUrl
+                    if (url != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(20.dp)
+                            ) {
+                                Text(
+                                    text = "Open this link on any device:",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Text(
+                                    text = url,
+                                    style = MaterialTheme.typography.titleMedium.copy(
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.primary
+                                    ),
+                                    textAlign = TextAlign.Center,
+                                    modifier = Modifier.clickable {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                        context.startActivity(intent)
+                                    }
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Waiting for authorization...",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        FilledTonalButton(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                context.startActivity(intent)
+                            },
+                            modifier = Modifier.fillMaxWidth(0.7f)
+                        ) {
+                            Text("Open in Browser")
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(onClick = onCancel) {
+                            Text("Cancel")
+                        }
+                    }
+                }
+                DeezerLoginStatus.SUCCESS -> {
+                    Icon(
+                        imageVector = Icons.Rounded.Check,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(48.dp)
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = "Successfully signed in!",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = onContinue,
+                        modifier = Modifier.fillMaxWidth(0.7f)
+                    ) {
+                        Text("Continue")
+                    }
+                }
+                DeezerLoginStatus.ERROR -> {
+                    Text(
+                        text = "Something went wrong. Please try again.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = onStartLogin,
+                        modifier = Modifier.fillMaxWidth(0.7f)
+                    ) {
+                        Text("Retry")
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+    }
+}
+
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun MediaPermissionPage(
@@ -869,90 +955,7 @@ fun AlarmsPermissionPage(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun BackupRestorePage(
-    uiState: SetupUiState,
-    onImportClicked: () -> Unit,
-    onSkip: () -> Unit
-) {
-    val isBusy = uiState.isInspectingBackup || uiState.isRestoringBackup
-    val progress = uiState.backupTransferProgress
 
-    PermissionPageLayout(
-        title = stringResource(R.string.setup_backup_have_title),
-        description = stringResource(R.string.setup_backup_have_description),
-        buttonText = when {
-            uiState.isInspectingBackup -> stringResource(R.string.setup_inspecting_backup)
-            uiState.isRestoringBackup -> stringResource(R.string.setup_restoring_backup)
-            else -> stringResource(R.string.setup_import_backup)
-        },
-        buttonEnabled = !isBusy,
-        icons = persistentListOf(
-            R.drawable.rounded_upload_file_24,
-            R.drawable.rounded_playlist_play_24,
-            R.drawable.rounded_settings_24,
-            R.drawable.rounded_lyrics_24,
-            R.drawable.rounded_monitoring_24
-        ),
-        onGrantClicked = onImportClicked
-    ) {
-        AnimatedVisibility(
-            visible = uiState.isInspectingBackup || progress != null
-        ) {
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                shape = RoundedCornerShape(20.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .animateContentSize()
-            ) {
-                Column(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    if (uiState.isInspectingBackup && progress == null) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            LoadingIndicator(modifier = Modifier.size(20.dp))
-                            Text(
-                                text = stringResource(R.string.setup_checking_backup),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    if (progress != null) {
-                        Text(
-                            text = progress.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = progress.detail,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        LinearProgressIndicator(
-                            progress = { progress.progress },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
-
-        TextButton(
-            onClick = onSkip,
-            enabled = !uiState.isRestoringBackup
-        ) {
-            Text(stringResource(R.string.skip_not_now), maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-    }
-}
 
 private data class ThemeOptionItem(
     val mode: String,
@@ -1670,273 +1673,7 @@ fun PermissionPageLayout(
     }
 }
 
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-private fun SetupRestoreDialog(
-    plan: RestorePlan,
-    inProgress: Boolean,
-    progress: BackupTransferProgressUpdate?,
-    onDismiss: () -> Unit,
-    onSelectionChanged: (Set<BackupSection>) -> Unit,
-    onConfirm: () -> Unit
-) {
-    val context = LocalContext.current
-    val dateText = remember(plan.manifest.createdAt) {
-        SimpleDateFormat("MMM d, yyyy 'at' h:mm a", Locale.getDefault())
-            .format(Date(plan.manifest.createdAt))
-    }
-    val availableModules = remember(plan.availableModules) {
-        plan.availableModules.toList().sortedBy { it.ordinal }
-    }
 
-    Dialog(
-        onDismissRequest = {
-            if (!inProgress) {
-                onDismiss()
-            }
-        },
-        properties = DialogProperties(
-            dismissOnBackPress = !inProgress,
-            dismissOnClickOutside = !inProgress,
-            usePlatformDefaultWidth = false
-        )
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.surfaceContainerLowest
-        ) {
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                bottomBar = {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainer,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            TextButton(
-                                onClick = onDismiss,
-                                enabled = !inProgress,
-                                modifier = Modifier.height(52.dp)
-                            ) {
-                                Text(stringResource(R.string.cancel), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            Button(
-                                onClick = onConfirm,
-                                enabled = plan.selectedModules.isNotEmpty() && !inProgress,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp)
-                            ) {
-                                if (inProgress) {
-                                    LoadingIndicator(modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(stringResource(R.string.restoring))
-                                } else {
-                                    Icon(Icons.Rounded.Restore, contentDescription = null)
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(stringResource(R.string.restore_selected))
-                                }
-                            }
-                        }
-                    }
-                }
-            ) { innerPadding ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(horizontal = 18.dp, vertical = 18.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.setup_restore_backup_title),
-                        style = MaterialTheme.typography.displaySmall.copy(
-                            fontFamily = RoundedSans
-                        ),
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = stringResource(R.string.setup_restore_backup_subtitle),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shape = RoundedCornerShape(24.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = stringResource(
-                                    R.string.setup_modules_selected_format,
-                                    plan.selectedModules.size,
-                                    plan.availableModules.size
-                                ),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = stringResource(R.string.setup_backup_created_format, dateText),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Text(
-                                text = stringResource(
-                                    R.string.setup_backup_from_version,
-                                    plan.manifest.appVersion.ifEmpty { context.getString(R.string.unknown_version) }
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (progress != null) {
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = progress.title,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    text = progress.detail,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                LinearProgressIndicator(
-                                    progress = { progress.progress },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
-
-                    if (plan.warnings.isNotEmpty()) {
-                        plan.warnings.forEach { warning ->
-                            Surface(
-                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
-                                shape = RoundedCornerShape(18.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    text = warning,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                        contentPadding = PaddingValues(bottom = 12.dp)
-                    ) {
-                        items(availableModules) { section ->
-                            val detail = plan.moduleDetails[section]
-                            val selected = section in plan.selectedModules
-                            SetupRestoreSectionRow(
-                                section = section,
-                                detail = detail,
-                                selected = selected,
-                                enabled = !inProgress,
-                                onClick = {
-                                    val newSelection = if (selected) {
-                                        plan.selectedModules - section
-                                    } else {
-                                        plan.selectedModules + section
-                                    }
-                                    onSelectionChanged(newSelection)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SetupRestoreSectionRow(
-    section: BackupSection,
-    detail: com.lostf1sh.pixelplayeross.data.backup.model.ModuleRestoreDetail?,
-    selected: Boolean,
-    enabled: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        color = if (selected) {
-            MaterialTheme.colorScheme.surfaceContainerHigh
-        } else {
-            MaterialTheme.colorScheme.surfaceContainer
-        },
-        shape = RoundedCornerShape(22.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(22.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Checkbox(
-                checked = selected,
-                onCheckedChange = { onClick() },
-                enabled = enabled
-            )
-
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.size(42.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        painter = painterResource(section.iconRes),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSecondaryContainer
-                    )
-                }
-            }
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = section.label,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    text = section.description,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Text(
-                text = detail?.entryCount?.let { "$it" } ?: "-",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-}
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable

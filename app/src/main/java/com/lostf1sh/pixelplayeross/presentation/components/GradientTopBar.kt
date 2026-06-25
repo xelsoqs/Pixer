@@ -162,18 +162,6 @@ fun HomeGradientTopBar(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
                         contentColor = MaterialTheme.colorScheme.onSurface
                     ),
-                    onClick = onStreamingClick
-                ) {
-                    Icon(
-                          imageVector = Icons.Rounded.Cloud,
-                          contentDescription = stringResource(R.string.presentation_batch_g_streaming_title)
-                    )
-                }
-                FilledIconButton(
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    ),
                     onClick = onMoreOptionsClick
                 ) {
                     Icon(

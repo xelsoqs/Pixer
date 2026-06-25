@@ -103,8 +103,6 @@ import com.lostf1sh.pixelplayeross.data.preferences.sanitizeNavBarCornerRadius
 import com.lostf1sh.pixelplayeross.data.preferences.ThemePreferencesRepository
 import com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository
 import com.lostf1sh.pixelplayeross.data.service.MusicService
-import com.lostf1sh.pixelplayeross.data.worker.SyncManager
-import com.lostf1sh.pixelplayeross.data.worker.SyncProgress
 import com.lostf1sh.pixelplayeross.presentation.components.AllFilesAccessDialog
 import com.lostf1sh.pixelplayeross.presentation.components.AppSidebarDrawer
 import com.lostf1sh.pixelplayeross.presentation.components.CrashReportDialog
@@ -168,8 +166,7 @@ class MainActivity : ComponentActivity() {
     lateinit var userPreferencesRepository: UserPreferencesRepository // Inject here
     @Inject
     lateinit var themePreferencesRepository: ThemePreferencesRepository
-    @Inject
-    lateinit var syncManager: SyncManager
+
     // For handling shortcut navigation - using StateFlow so composables can observe changes
     private val _pendingPlaylistNavigation = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     private val _pendingShuffleAll = kotlinx.coroutines.flow.MutableStateFlow(false)
@@ -203,20 +200,7 @@ class MainActivity : ComponentActivity() {
 
         // READ BENCHMARK SIGNAL
         val isBenchmarkMode = intent.getBooleanExtra("is_benchmark", false)
-        val shouldBenchmarkRebuildDatabase =
-            isBenchmarkMode && intent.getBooleanExtra("benchmark_rebuild_database", false)
-        Timber.tag("PixelPlayerBenchmark").i(
-            "onCreate benchmark=$isBenchmarkMode rebuildDatabase=$shouldBenchmarkRebuildDatabase"
-        )
-        if (shouldBenchmarkRebuildDatabase) {
-            lifecycleScope.launch {
-                userPreferencesRepository.setInitialSetupDone(true)
-                Timber.tag("PixelPlayerBenchmark").i("Enqueueing benchmark database rebuild")
-                syncManager.rebuildDatabase()
-                delay(1_500L)
-                playerViewModel.prepareBenchmarkPlayerFromLibrary()
-            }
-        }
+
 
         setContent {
             val systemDarkTheme = isSystemInDarkTheme()
@@ -234,9 +218,9 @@ class MainActivity : ComponentActivity() {
             
             // Permissions Logic
             val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                listOf(Manifest.permission.READ_MEDIA_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+                listOf(Manifest.permission.POST_NOTIFICATIONS)
             } else {
-                listOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+                emptyList()
             }
             @OptIn(ExperimentalPermissionsApi::class)
             val permissionState = rememberMultiplePermissionsState(permissions = permissions)
@@ -460,22 +444,7 @@ class MainActivity : ComponentActivity() {
     private fun MainAppContent(playerViewModel: PlayerViewModel, mainViewModel: MainViewModel) {
         Trace.beginSection("MainActivity.MainAppContent")
         val navController = rememberNavController()
-        val isSyncing by mainViewModel.isSyncing.collectAsStateWithLifecycle()
-        val hasCompletedInitialSync by mainViewModel.hasCompletedInitialSync.collectAsStateWithLifecycle()
-        val syncProgress by mainViewModel.syncProgress.collectAsStateWithLifecycle()
-
-        // Surface a failed library sync to the user (the progress flow silently reverts to idle).
         val context = LocalContext.current
-        LaunchedEffect(Unit) {
-            mainViewModel.syncFailed.collect {
-                Toast.makeText(
-                    context,
-                    context.getString(R.string.sync_failed_toast),
-                    Toast.LENGTH_LONG
-                ).show()
-            }
-        }
-
         // isMediaControllerReady used below for playlist navigation gate
         val isMediaControllerReady by playerViewModel.isMediaControllerReady.collectAsStateWithLifecycle()
         
@@ -511,52 +480,8 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // State controlling whether the loading indicator may be shown after a delay
-        var canShowLoadingIndicator by remember { mutableStateOf(false) }
-        // Track when the loading indicator was first shown for minimum display time
-        var loadingShownTimestamp by remember { mutableStateOf(0L) }
-        val minimumDisplayDuration = 1500L // Show loading for at least 1.5 seconds
-
-        // First-install gate: until the first library sync has ever completed
-        // (lastSyncTimestamp == 0), keep the preparing overlay up while the sync runs.
-        // Deliberately NOT conditioned on the library being empty: the scanner inserts
-        // songs in batches mid-scan, so an emptiness check drops the indicator after the
-        // first batch lands while the scan is still running — leaving the user on a
-        // half-filled home screen with no feedback (the bug this replaces).
-        val shouldPotentiallyShowLoading = isSyncing && !hasCompletedInitialSync
-
-        LaunchedEffect(shouldPotentiallyShowLoading) {
-            if (shouldPotentiallyShowLoading) {
-                // Wait a short period before allowing the loading indicator to be shown
-                // Adjust this value as needed (e.g. 300-500 ms)
-                delay(300L)
-                // Re-check the condition after the delay,
-                // since the state may have changed.
-                if (mainViewModel.isSyncing.value && !mainViewModel.hasCompletedInitialSync.value) {
-                    canShowLoadingIndicator = true
-                    loadingShownTimestamp = System.currentTimeMillis()
-                }
-            } else {
-                // Ensure minimum display time before hiding
-                if (canShowLoadingIndicator && loadingShownTimestamp > 0) {
-                    val elapsed = System.currentTimeMillis() - loadingShownTimestamp
-                    val remaining = minimumDisplayDuration - elapsed
-                    if (remaining > 0) {
-                        delay(remaining)
-                    }
-                }
-                canShowLoadingIndicator = false
-                loadingShownTimestamp = 0L
-            }
-        }
-
         Box(modifier = Modifier.fillMaxSize()) {
             MainUI(playerViewModel, navController)
-
-            // Show the LoadingOverlay only if the conditions are met AND the delay has passed
-            if (canShowLoadingIndicator) {
-                LoadingOverlay(syncProgress)
-            }
         }
         Trace.endSection() // End MainActivity.MainAppContent
     }
@@ -956,59 +881,6 @@ class MainActivity : ComponentActivity() {
         }
 
         Trace.endSection()
-    }
-
-    @OptIn(ExperimentalMaterial3ExpressiveApi::class)
-    @Composable
-    private fun LoadingOverlay(syncProgress: SyncProgress) {
-        // Animate progress smoothly instead of jumping in steps
-        val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
-            targetValue = syncProgress.progress,
-            animationSpec = androidx.compose.animation.core.spring(
-                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                stiffness = androidx.compose.animation.core.Spring.StiffnessLow
-            ),
-            label = "SyncProgressAnimation"
-        )
-        
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background.copy(alpha = 0.9f))
-                .clickable(enabled = false, onClick = {}),
-            contentAlignment = Alignment.Center
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(horizontal = 32.dp)
-            ) {
-                CircularWavyProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.sync_preparing_library),
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                
-                if (syncProgress.hasProgress) {
-                    Spacer(modifier = Modifier.height(16.dp))
-                    androidx.compose.material3.LinearWavyProgressIndicator(
-                        progress = { animatedProgress },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = stringResource(
-                            R.string.sync_scanned_count,
-                            syncProgress.currentCount,
-                            syncProgress.totalCount
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
     }
 
 

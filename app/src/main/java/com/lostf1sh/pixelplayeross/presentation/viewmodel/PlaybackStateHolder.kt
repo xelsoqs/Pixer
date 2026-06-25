@@ -497,12 +497,15 @@ class PlaybackStateHolder @Inject constructor(
             // idle and the CPU stays asleep. As soon as a subscriber appears
             // (player sheet opened, widget bound, etc.) the inner loop resumes.
             _currentPosition.subscriptionCount.collectLatest { subscriberCount ->
+                Timber.d("PlaybackStateHolder", "progressJob subscriberCount: $subscriberCount")
                 if (subscriberCount == 0) return@collectLatest
                 coroutineScope {
                     while (isActive) {
                         val tickMs = currentProgressTickMs()
                         val controller = activeLocalPlayer()
-                        if (shouldSampleLocalProgress(controller)) {
+                        val sample = shouldSampleLocalProgress(controller)
+                        Timber.d("PlaybackStateHolder", "progress tick loop running. active: ${controller.isPlaying}, shouldSample: $sample, count: ${controller.mediaItemCount}")
+                        if (sample) {
                             val visibleSong = _stablePlayerState.value.currentSong
                             val currentMediaId = controller.currentMediaItem?.mediaId
                             val hasMediaMismatch = visibleSong?.id != null &&
@@ -528,6 +531,7 @@ class PlaybackStateHolder @Inject constructor(
                             )
 
                             val resolvedPosition = resolveUiPosition(currentMediaId, currentPosition)
+                            Timber.d("PlaybackStateHolder", "updating currentPosition to $resolvedPosition (was ${_currentPosition.value}) from actual $currentPosition")
                             if (_currentPosition.value != resolvedPosition) {
                                 _currentPosition.value = resolvedPosition
                             }

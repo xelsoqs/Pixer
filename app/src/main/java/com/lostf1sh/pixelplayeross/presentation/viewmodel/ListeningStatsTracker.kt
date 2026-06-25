@@ -71,7 +71,8 @@ class ListeningStatsTracker @Inject constructor(
             positionMs = positionMs,
             durationMs = durationMs,
             fallbackDurationMs = song?.duration ?: 0L,
-            isPlaying = isPlaying
+            isPlaying = isPlaying,
+            song = song
         )
     }
 
@@ -80,14 +81,16 @@ class ListeningStatsTracker @Inject constructor(
         songId: String?,
         positionMs: Long,
         durationMs: Long,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        song: Song? = null
     ) {
         onTrackChanged(
             songId = songId,
             positionMs = positionMs,
             durationMs = durationMs,
             fallbackDurationMs = 0L,
-            isPlaying = isPlaying
+            isPlaying = isPlaying,
+            song = song
         )
     }
 
@@ -97,7 +100,8 @@ class ListeningStatsTracker @Inject constructor(
         positionMs: Long,
         durationMs: Long,
         fallbackDurationMs: Long,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        song: Song? = null
     ) {
         finalizeCurrentSession()
         val safeSongId = songId?.takeIf { it.isNotBlank() }
@@ -111,6 +115,7 @@ class ListeningStatsTracker @Inject constructor(
 
         currentSession = ActiveSession(
             songId = safeSongId,
+            song = song,
             totalDurationMs = normalizedDuration,
             startedAtEpochMs = nowEpoch,
             lastKnownPositionMs = positionMs.coerceAtLeast(0L),
@@ -167,14 +172,16 @@ class ListeningStatsTracker @Inject constructor(
         songId: String?,
         positionMs: Long,
         durationMs: Long,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        song: Song? = null
     ) {
         ensureSession(
             songId = songId,
             positionMs = positionMs,
             durationMs = durationMs,
             fallbackDurationMs = 0L,
-            isPlaying = isPlaying
+            isPlaying = isPlaying,
+            song = song
         )
     }
 
@@ -184,7 +191,8 @@ class ListeningStatsTracker @Inject constructor(
         positionMs: Long,
         durationMs: Long,
         fallbackDurationMs: Long,
-        isPlaying: Boolean
+        isPlaying: Boolean,
+        song: Song? = null
     ) {
         val safeSongId = songId?.takeIf { it.isNotBlank() }
         if (safeSongId == null) {
@@ -207,7 +215,8 @@ class ListeningStatsTracker @Inject constructor(
             positionMs = positionMs,
             durationMs = durationMs,
             fallbackDurationMs = fallbackDurationMs,
-            isPlaying = isPlaying
+            isPlaying = isPlaying,
+            song = song
         )
     }
 
@@ -247,7 +256,8 @@ class ListeningStatsTracker @Inject constructor(
                 songId = songId,
                 listened = listened,
                 timestamp = timestamp,
-                forceSynchronous = forceSynchronousPersistence
+                forceSynchronous = forceSynchronousPersistence,
+                song = session.song
             )
         }
         currentSession = null
@@ -272,27 +282,24 @@ class ListeningStatsTracker @Inject constructor(
         songId: String,
         listened: Long,
         timestamp: Long,
-        forceSynchronous: Boolean
+        forceSynchronous: Boolean,
+        song: Song? = null
     ) {
         persistenceScope.launch {
             runCatching {
-                persistPlaybackInternal(songId = songId, listened = listened, timestamp = timestamp)
+                persistPlaybackInternal(songId = songId, listened = listened, timestamp = timestamp, song = song)
             }.onFailure { throwable ->
                 Timber.e(throwable, "Failed to persist listening session for song=%s", songId)
             }
         }
     }
 
-    private suspend fun persistPlaybackInternal(songId: String, listened: Long, timestamp: Long) {
-        dailyMixManager.recordPlay(
-            songId = songId,
-            songDurationMs = listened,
-            timestamp = timestamp
-        )
+    private suspend fun persistPlaybackInternal(songId: String, listened: Long, timestamp: Long, song: Song? = null) {
         playbackStatsRepository.recordPlayback(
             songId = songId,
             durationMs = listened,
-            timestamp = timestamp
+            timestamp = timestamp,
+            song = song
         )
     }
 
@@ -323,6 +330,7 @@ class ListeningStatsTracker @Inject constructor(
  */
 data class ActiveSession(
     val songId: String,
+    val song: Song? = null,
     var totalDurationMs: Long,
     val startedAtEpochMs: Long,
     var lastKnownPositionMs: Long,

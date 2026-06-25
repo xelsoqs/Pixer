@@ -800,7 +800,8 @@ fun LyricsSheet(
                                         item(key = "provider_text") {
                                             ProviderText(
                                                 providerText = context.resources.getString(R.string.lyrics_provided_by),
-                                                uri = context.resources.getString(R.string.lrclib_uri),
+                                                providerName = "Deezer",
+                                                uri = "https://deezer.com",
                                                 textAlign = TextAlign.Center,
                                                 accentColor = lyricHighlightColor,
                                                 modifier = Modifier

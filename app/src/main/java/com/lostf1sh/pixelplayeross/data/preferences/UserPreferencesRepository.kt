@@ -68,6 +68,12 @@ enum class AlbumArtQuality(val maxSize: Int, val label: String) {
     ORIGINAL(0, "Original - Maximum quality")
 }
 
+enum class DeezerAudioQuality(val label: String) {
+    STANDARD("Standard (128kbps)"),
+    HIGH("High Quality (320kbps)"),
+    HIFI("HiFi (FLAC)")
+}
+
 @Singleton
 class UserPreferencesRepository
 @Inject
@@ -127,6 +133,14 @@ constructor(
         val IS_FOLDER_FILTER_ACTIVE = booleanPreferencesKey("is_folder_filter_active")
         val IS_FOLDERS_PLAYLIST_VIEW = booleanPreferencesKey("is_folders_playlist_view")
         val HIDE_LOCAL_MEDIA = booleanPreferencesKey("hide_local_media")
+        val PREFERRED_LYRICS_SOURCE = stringPreferencesKey("preferred_lyrics_source")
+        val ENABLE_EXTERNAL_ARTIST_IMAGES = booleanPreferencesKey("enable_external_artist_images")
+
+        // Deezer API Auth
+        val DEEZER_ACCESS_TOKEN = stringPreferencesKey("deezer_access_token")
+        val DEEZER_USER_ID = longPreferencesKey("deezer_user_id")
+
+        val SHOW_BETA_INFO_DIALOG = booleanPreferencesKey("show_beta_info_dialog")
         val FOLDERS_SOURCE = stringPreferencesKey("folders_source")
         val FOLDER_BACK_GESTURE_NAVIGATION = booleanPreferencesKey("folder_back_gesture_navigation")
         val USE_SMOOTH_CORNERS = booleanPreferencesKey("use_smooth_corners")
@@ -208,6 +222,7 @@ constructor(
 
         // Developer Options
         val ALBUM_ART_QUALITY = stringPreferencesKey("album_art_quality")
+        val DEEZER_AUDIO_QUALITY = stringPreferencesKey("deezer_audio_quality")
         val ALBUM_ART_CACHE_LIMIT_MB = intPreferencesKey("album_art_cache_limit_mb")
         val TAP_BACKGROUND_CLOSES_PLAYER = booleanPreferencesKey("tap_background_closes_player")
         val HAPTICS_ENABLED = booleanPreferencesKey("haptics_enabled")
@@ -625,6 +640,30 @@ constructor(
         }
     }
 
+    // Deezer API Auth
+    val deezerAccessTokenFlow: Flow<String?> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.DEEZER_ACCESS_TOKEN]
+    }
+
+    val deezerUserIdFlow: Flow<Long?> = dataStore.data.map { preferences ->
+        preferences[PreferencesKeys.DEEZER_USER_ID]
+    }.distinctUntilChanged()
+
+    suspend fun saveDeezerAuth(accessToken: String, userId: Long) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DEEZER_ACCESS_TOKEN] = accessToken
+            preferences[PreferencesKeys.DEEZER_USER_ID] = userId
+        }
+    }
+
+    suspend fun clearDeezerAuth() {
+        dataStore.edit { preferences ->
+            preferences.remove(PreferencesKeys.DEEZER_ACCESS_TOKEN)
+            preferences.remove(PreferencesKeys.DEEZER_USER_ID)
+        }
+    }
+
+
     val autoScanLrcFilesFlow: Flow<Boolean> =
             dataStore.data.map { preferences ->
                 preferences[PreferencesKeys.AUTO_SCAN_LRC_FILES] ?: false
@@ -638,7 +677,7 @@ constructor(
 
     val immersiveLyricsEnabledFlow: Flow<Boolean> =
             dataStore.data.map { preferences ->
-                preferences[PreferencesKeys.IMMERSIVE_LYRICS_ENABLED] ?: false
+                preferences[PreferencesKeys.IMMERSIVE_LYRICS_ENABLED] ?: true
             }
 
     val immersiveLyricsTimeoutFlow: Flow<Long> =
@@ -846,7 +885,7 @@ constructor(
 
     val showQueueHistoryFlow: Flow<Boolean> =
             dataStore.data.map { preferences ->
-                preferences[PreferencesKeys.SHOW_QUEUE_HISTORY] ?: false  // Default to false for performance
+                preferences[PreferencesKeys.SHOW_QUEUE_HISTORY] ?: true  // Default to true
             }
 
     suspend fun setShowQueueHistory(show: Boolean) {
@@ -1469,9 +1508,9 @@ constructor(
                     // If deserialization fails, do nothing to avoid overwriting the
                     // user's data.
                 }
+            } else {
+                preferences[PreferencesKeys.LIBRARY_TABS_ORDER] = json.encodeToString(listOf("SONGS", "ALBUMS", "ARTIST", "PLAYLISTS", "FOLDERS", "LIKED"))
             }
-            // If orderJson is null, it means the user has never reordered,
-            // so the default order that already includes FOLDERS will be used.
         }
     }
 
@@ -1561,6 +1600,22 @@ constructor(
     suspend fun setAlbumArtQuality(quality: AlbumArtQuality) {
         dataStore.edit { preferences ->
             preferences[PreferencesKeys.ALBUM_ART_QUALITY] = quality.name
+        }
+    }
+
+    val deezerAudioQualityFlow: Flow<DeezerAudioQuality> =
+        dataStore.data.map { preferences ->
+            preferences[PreferencesKeys.DEEZER_AUDIO_QUALITY]
+                ?.let {
+                    try { DeezerAudioQuality.valueOf(it) }
+                    catch (e: Exception) { DeezerAudioQuality.HIGH }
+                }
+                ?: DeezerAudioQuality.HIGH
+        }
+
+    suspend fun setDeezerAudioQuality(quality: DeezerAudioQuality) {
+        dataStore.edit { preferences ->
+            preferences[PreferencesKeys.DEEZER_AUDIO_QUALITY] = quality.name
         }
     }
 

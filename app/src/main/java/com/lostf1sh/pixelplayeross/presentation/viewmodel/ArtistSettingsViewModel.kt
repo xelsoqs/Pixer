@@ -3,7 +3,7 @@ package com.lostf1sh.pixelplayeross.presentation.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository
-import com.lostf1sh.pixelplayeross.data.worker.SyncManager
+
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -25,19 +25,13 @@ data class ArtistSettingsUiState(
 
 @HiltViewModel
 class ArtistSettingsViewModel @Inject constructor(
-    private val userPreferencesRepository: UserPreferencesRepository,
-    private val syncManager: SyncManager
+    private val userPreferencesRepository: UserPreferencesRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ArtistSettingsUiState())
     val uiState: StateFlow<ArtistSettingsUiState> = _uiState.asStateFlow()
 
-    val isSyncing: StateFlow<Boolean> = syncManager.isSyncing
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = false
-        )
+
 
     init {
         viewModelScope.launch {
@@ -70,11 +64,7 @@ class ArtistSettingsViewModel @Inject constructor(
             }
         }
 
-        viewModelScope.launch {
-            syncManager.isSyncing.collect { syncing ->
-                _uiState.update { it.copy(isResyncing = syncing) }
-            }
-        }
+
     }
 
     fun setGroupByAlbumArtist(enabled: Boolean) {
@@ -151,7 +141,8 @@ class ArtistSettingsViewModel @Inject constructor(
 
     fun rescanLibrary() {
         viewModelScope.launch {
-            syncManager.fullSync(deepScan = false)
+        viewModelScope.launch {
+        }
         }
     }
 }

@@ -20,4 +20,71 @@ interface DeezerApiService {
         @Query("q") query: String,
         @Query("limit") limit: Int = 1
     ): DeezerSearchResponse
+
+    @GET("platform/generic/user/{user_id}/multiflow/default")
+    suspend fun getMultiFlow(
+        @retrofit2.http.Path("user_id") userId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerMultiFlowResponse
+
+    @GET("platform/gcast/user/{user_id}/recommended-playlists")
+    suspend fun getRecommendedPlaylists(
+        @retrofit2.http.Path("user_id") userId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerRecommendedPlaylistsResponse
+
+    @GET("platform/gcast/track/{track_id}/streamUrls")
+    suspend fun getStreamUrls(
+        @retrofit2.http.Path("track_id") trackId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerStreamUrlsResponse
+
+    @GET("user/me")
+    suspend fun getUserMe(
+        @Query("access_token") auth: String
+    ): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerUserMeResponse
+
+    @GET("platform/generic/user/{user_id}/multiflow")
+    suspend fun getMultiFlowConfigs(
+        @retrofit2.http.Path("user_id") userId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerMultiFlowConfigsResponse
+
+    @GET
+    suspend fun getMultiFlowTracks(
+        @retrofit2.http.Url url: String,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerMultiFlowResponse
+
+    @GET("platform/generic/playlist/{playlist_id}?include=lyrics&nb_items=50")
+    suspend fun getPlaylistTracks(
+        @retrofit2.http.Path("playlist_id") playlistId: String,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerPlaylistDetailResponse
+
+    @GET("platform/generic/lyrics/{track_id}")
+    suspend fun getLyrics(
+        @retrofit2.http.Path("track_id") trackId: String,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerLyricsResponse
+
+    @GET("user/{user_id}/tracks")
+    suspend fun getLovedTracks(
+        @retrofit2.http.Path("user_id") userId: Long,
+        @retrofit2.http.Header("authorization") auth: String,
+        @retrofit2.http.Query("limit") limit: Int,
+        @retrofit2.http.Query("index") index: Int
+    ): DeezerPlaylistDetailResponse
+
+    @retrofit2.http.POST("user/me/tracks")
+    suspend fun addTrackToFavorites(
+        @retrofit2.http.Query("access_token") token: String,
+        @retrofit2.http.Query("track_id") trackId: Long
+    ): retrofit2.Response<Boolean>
+
+    @retrofit2.http.DELETE("user/me/tracks")
+    suspend fun removeTrackFromFavorites(
+        @retrofit2.http.Query("access_token") token: String,
+        @retrofit2.http.Query("track_id") trackId: Long
+    ): retrofit2.Response<Boolean>
 }

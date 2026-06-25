@@ -31,7 +31,9 @@ import com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository
 import com.lostf1sh.pixelplayeross.data.preferences.PlaylistPreferencesRepository
 import com.lostf1sh.pixelplayeross.data.preferences.dataStore
 import com.lostf1sh.pixelplayeross.data.media.SongMetadataEditor
+import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerAuthApi
 import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerApiService
+import com.lostf1sh.pixelplayeross.data.repository.DeezerRepository
 import com.lostf1sh.pixelplayeross.data.network.lyrics.LrcLibApiService
 import com.lostf1sh.pixelplayeross.data.repository.ArtistImageRepository
 import com.lostf1sh.pixelplayeross.data.repository.LyricsRepository
@@ -185,19 +187,7 @@ object AppModule {
     fun provideLocalPlaylistDao(database: PixelPlayerDatabase): LocalPlaylistDao {
         return database.localPlaylistDao()
     }
-
-    @Singleton
-    @Provides
-    fun provideNavidromeDao(database: PixelPlayerDatabase): com.lostf1sh.pixelplayeross.data.database.NavidromeDao {
-        return database.navidromeDao()
-    }
     
-    @Singleton
-    @Provides
-    fun provideJellyfinDao(database: PixelPlayerDatabase): com.lostf1sh.pixelplayeross.data.database.JellyfinDao {
-        return database.jellyfinDao()
-    }
-
     @Provides
     @Singleton
     fun provideImageLoader(
@@ -234,23 +224,6 @@ object AppModule {
             .build()
     }
 
-    @Provides
-    @Singleton
-    fun provideLyricsRepository(
-        @ApplicationContext context: Context,
-        lrcLibApiService: LrcLibApiService,
-        lyricsDao: LyricsDao,
-        okHttpClient: OkHttpClient,
-        userPreferencesRepository: UserPreferencesRepository
-    ): LyricsRepository {
-        return LyricsRepositoryImpl(
-            context = context,
-            lrcLibApiService = lrcLibApiService,
-            lyricsDao = lyricsDao,
-            okHttpClient = okHttpClient,
-            userPreferencesRepository = userPreferencesRepository
-        )
-    }
 
     @Provides
     @Singleton
@@ -276,51 +249,13 @@ object AppModule {
         return FolderTreeBuilder()
     }
 
-    @Provides
-    @Singleton
-    fun provideMusicRepository(
-        @ApplicationContext context: Context,
-        userPreferencesRepository: UserPreferencesRepository,
-        playlistPreferencesRepository: PlaylistPreferencesRepository,
-        searchHistoryDao: SearchHistoryDao,
-        musicDao: MusicDao,
-        lyricsRepository: LyricsRepository,
-        songRepository: SongRepository,
-        favoritesDao: FavoritesDao,
-        artistImageRepository: ArtistImageRepository,
-        folderTreeBuilder: FolderTreeBuilder
-    ): MusicRepository {
-        return MusicRepositoryImpl(
-            context = context,
-            userPreferencesRepository = userPreferencesRepository,
-            playlistPreferencesRepository = playlistPreferencesRepository,
-            searchHistoryDao = searchHistoryDao,
-            musicDao = musicDao,
-            lyricsRepository = lyricsRepository,
-            songRepository = songRepository,
-            favoritesDao = favoritesDao,
-            artistImageRepository = artistImageRepository,
-            folderTreeBuilder = folderTreeBuilder
-        )
-
-    }
-
-    @Provides
-    @Singleton
-    fun provideTransitionRepository(
-        transitionRepositoryImpl: TransitionRepositoryImpl
-    ): TransitionRepository {
-        return transitionRepositoryImpl
-    }
 
     @Singleton
     @Provides
     fun provideSongMetadataEditor(
-        @ApplicationContext context: Context,
-        musicDao: MusicDao,
-        userPreferencesRepository: UserPreferencesRepository
+        @ApplicationContext context: Context
     ): SongMetadataEditor {
-        return SongMetadataEditor(context, musicDao, userPreferencesRepository)
+        return SongMetadataEditor(context)
     }
 
     /**
@@ -483,16 +418,18 @@ object AppModule {
         return retrofit.create(DeezerApiService::class.java)
     }
 
+    @Provides
+    @Singleton
+    fun provideDeezerAuthApi(@DeezerRetrofit retrofit: Retrofit): DeezerAuthApi {
+        return retrofit.create(DeezerAuthApi::class.java)
+    }
+
     /**
      * Provides the artist image repository.
      */
     @Provides
     @Singleton
-    fun provideArtistImageRepository(
-        deezerApiService: DeezerApiService,
-        musicDao: MusicDao,
-        userPreferencesRepository: UserPreferencesRepository
-    ): ArtistImageRepository {
-        return ArtistImageRepository(deezerApiService, musicDao, userPreferencesRepository)
+    fun provideArtistImageRepository(): ArtistImageRepository {
+        return ArtistImageRepository()
     }
 }

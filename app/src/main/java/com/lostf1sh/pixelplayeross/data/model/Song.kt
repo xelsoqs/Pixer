@@ -23,6 +23,7 @@ data class Song(
     val path: String, // Added for direct file system access
     val contentUriString: String,
     val albumArtUriString: String?,
+    val highResAlbumArtUriString: String? = null, // High-res art for full-screen player (Deezer streams)
     val duration: Long,
     val genre: String? = null,
     val lyrics: String? = null,

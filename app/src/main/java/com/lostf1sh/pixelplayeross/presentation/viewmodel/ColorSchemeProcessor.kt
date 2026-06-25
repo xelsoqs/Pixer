@@ -15,11 +15,6 @@ import coil.request.ImageRequest
 import coil.size.Size
 import com.lostf1sh.pixelplayeross.data.preferences.AlbumArtColorAccuracy
 import com.lostf1sh.pixelplayeross.data.preferences.AlbumArtPaletteStyle
-import com.lostf1sh.pixelplayeross.data.database.AlbumArtThemeDao
-import com.lostf1sh.pixelplayeross.data.database.AlbumArtThemeEntity
-import com.lostf1sh.pixelplayeross.data.database.StoredColorSchemeValues
-import com.lostf1sh.pixelplayeross.data.database.toComposeColor
-import com.lostf1sh.pixelplayeross.utils.LocalArtworkUri
 import com.lostf1sh.pixelplayeross.ui.theme.clearExtractedColorCache
 import com.lostf1sh.pixelplayeross.ui.theme.extractSeedColor
 import com.lostf1sh.pixelplayeross.ui.theme.generateColorSchemeFromSeed
@@ -45,8 +40,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class ColorSchemeProcessor @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val albumArtThemeDao: AlbumArtThemeDao
+    @ApplicationContext private val context: Context
 ) {
     // In-memory LRU cache for faster access (avoids DB reads for hot paths)
     private val memoryCache = LruCache<String, ColorSchemePair>(20)
@@ -160,19 +154,6 @@ class ColorSchemeProcessor @Inject constructor(
             // Cache to memory
             memoryCache.put(cacheKey, schemePair)
 
-            if (persistToDatabase) {
-                withContext(Dispatchers.IO) {
-                    albumArtThemeDao.insertTheme(
-                        mapColorSchemePairToEntity(
-                            uri = albumArtUri,
-                            paletteStyle = paletteStyle,
-                            colorAccuracyLevel = colorAccuracyLevel,
-                            pair = schemePair
-                        )
-                    )
-                }
-            }
-
             return schemePair
         } catch (e: Exception) {
             return null
@@ -187,7 +168,7 @@ class ColorSchemeProcessor @Inject constructor(
     private suspend fun loadBitmapForColorExtraction(uri: String, skipCache: Boolean): Bitmap? {
         return try {
             val cachePolicy = if (skipCache) CachePolicy.DISABLED else CachePolicy.ENABLED
-            val diskCachePolicy = if (LocalArtworkUri.isLocalArtworkUri(uri)) CachePolicy.DISABLED else cachePolicy
+            val diskCachePolicy = cachePolicy
             
             val request = ImageRequest.Builder(context)
                 .data(uri)
@@ -261,9 +242,6 @@ class ColorSchemeProcessor @Inject constructor(
     suspend fun invalidateScheme(uri: String) {
         clearExtractedColorCache()
         removeUriFromMemoryCache(uri)
-        withContext(Dispatchers.IO) {
-            albumArtThemeDao.deleteThemesByUris(listOf(uri))
-        }
     }
 
     private fun removeUriFromMemoryCache(uri: String) {
@@ -274,126 +252,6 @@ class ColorSchemeProcessor @Inject constructor(
     }
 
     // Mapping functions
-    private fun mapColorSchemePairToEntity(
-        uri: String,
-        paletteStyle: AlbumArtPaletteStyle,
-        colorAccuracyLevel: Int,
-        pair: ColorSchemePair
-    ): AlbumArtThemeEntity {
-        fun mapScheme(cs: ColorScheme) = StoredColorSchemeValues(
-            primary = cs.primary.toHexString(),
-            onPrimary = cs.onPrimary.toHexString(),
-            primaryContainer = cs.primaryContainer.toHexString(),
-            onPrimaryContainer = cs.onPrimaryContainer.toHexString(),
-            secondary = cs.secondary.toHexString(),
-            onSecondary = cs.onSecondary.toHexString(),
-            secondaryContainer = cs.secondaryContainer.toHexString(),
-            onSecondaryContainer = cs.onSecondaryContainer.toHexString(),
-            tertiary = cs.tertiary.toHexString(),
-            onTertiary = cs.onTertiary.toHexString(),
-            tertiaryContainer = cs.tertiaryContainer.toHexString(),
-            onTertiaryContainer = cs.onTertiaryContainer.toHexString(),
-            background = cs.background.toHexString(),
-            onBackground = cs.onBackground.toHexString(),
-            surface = cs.surface.toHexString(),
-            onSurface = cs.onSurface.toHexString(),
-            surfaceVariant = cs.surfaceVariant.toHexString(),
-            onSurfaceVariant = cs.onSurfaceVariant.toHexString(),
-            error = cs.error.toHexString(),
-            onError = cs.onError.toHexString(),
-            outline = cs.outline.toHexString(),
-            errorContainer = cs.errorContainer.toHexString(),
-            onErrorContainer = cs.onErrorContainer.toHexString(),
-            inversePrimary = cs.inversePrimary.toHexString(),
-            inverseSurface = cs.inverseSurface.toHexString(),
-            inverseOnSurface = cs.inverseOnSurface.toHexString(),
-            surfaceTint = cs.surfaceTint.toHexString(),
-            outlineVariant = cs.outlineVariant.toHexString(),
-            scrim = cs.scrim.toHexString(),
-            surfaceBright = cs.surfaceBright.toHexString(),
-            surfaceDim = cs.surfaceDim.toHexString(),
-            surfaceContainer = cs.surfaceContainer.toHexString(),
-            surfaceContainerHigh = cs.surfaceContainerHigh.toHexString(),
-            surfaceContainerHighest = cs.surfaceContainerHighest.toHexString(),
-            surfaceContainerLow = cs.surfaceContainerLow.toHexString(),
-            surfaceContainerLowest = cs.surfaceContainerLowest.toHexString(),
-            primaryFixed = cs.primaryFixed.toHexString(),
-            primaryFixedDim = cs.primaryFixedDim.toHexString(),
-            onPrimaryFixed = cs.onPrimaryFixed.toHexString(),
-            onPrimaryFixedVariant = cs.onPrimaryFixedVariant.toHexString(),
-            secondaryFixed = cs.secondaryFixed.toHexString(),
-            secondaryFixedDim = cs.secondaryFixedDim.toHexString(),
-            onSecondaryFixed = cs.onSecondaryFixed.toHexString(),
-            onSecondaryFixedVariant = cs.onSecondaryFixedVariant.toHexString(),
-            tertiaryFixed = cs.tertiaryFixed.toHexString(),
-            tertiaryFixedDim = cs.tertiaryFixedDim.toHexString(),
-            onTertiaryFixed = cs.onTertiaryFixed.toHexString(),
-            onTertiaryFixedVariant = cs.onTertiaryFixedVariant.toHexString()
-        )
-        return AlbumArtThemeEntity(
-            albumArtUriString = uri,
-            paletteStyle = paletteStyleCacheKey(paletteStyle, colorAccuracyLevel),
-            lightThemeValues = mapScheme(pair.light),
-            darkThemeValues = mapScheme(pair.dark)
-        )
-    }
-
-    private fun mapEntityToColorSchemePair(entity: AlbumArtThemeEntity): ColorSchemePair {
-        fun mapStored(sv: StoredColorSchemeValues) = ColorScheme(
-            primary = sv.primary.toComposeColor(),
-            onPrimary = sv.onPrimary.toComposeColor(),
-            primaryContainer = sv.primaryContainer.toComposeColor(),
-            onPrimaryContainer = sv.onPrimaryContainer.toComposeColor(),
-            inversePrimary = sv.inversePrimary.toComposeColor(),
-            secondary = sv.secondary.toComposeColor(),
-            onSecondary = sv.onSecondary.toComposeColor(),
-            secondaryContainer = sv.secondaryContainer.toComposeColor(),
-            onSecondaryContainer = sv.onSecondaryContainer.toComposeColor(),
-            tertiary = sv.tertiary.toComposeColor(),
-            onTertiary = sv.onTertiary.toComposeColor(),
-            tertiaryContainer = sv.tertiaryContainer.toComposeColor(),
-            onTertiaryContainer = sv.onTertiaryContainer.toComposeColor(),
-            background = sv.background.toComposeColor(),
-            onBackground = sv.onBackground.toComposeColor(),
-            surface = sv.surface.toComposeColor(),
-            onSurface = sv.onSurface.toComposeColor(),
-            surfaceVariant = sv.surfaceVariant.toComposeColor(),
-            onSurfaceVariant = sv.onSurfaceVariant.toComposeColor(),
-            error = sv.error.toComposeColor(),
-            onError = sv.onError.toComposeColor(),
-            outline = sv.outline.toComposeColor(),
-            errorContainer = sv.errorContainer.toComposeColor(),
-            onErrorContainer = sv.onErrorContainer.toComposeColor(),
-            inverseSurface = sv.inverseSurface.toComposeColor(),
-            inverseOnSurface = sv.inverseOnSurface.toComposeColor(),
-            surfaceTint = sv.surfaceTint.toComposeColor(),
-            outlineVariant = sv.outlineVariant.toComposeColor(),
-            scrim = sv.scrim.toComposeColor(),
-            surfaceBright = sv.surfaceBright.toComposeColor(),
-            surfaceDim = sv.surfaceDim.toComposeColor(),
-            surfaceContainer = sv.surfaceContainer.toComposeColor(),
-            surfaceContainerHigh = sv.surfaceContainerHigh.toComposeColor(),
-            surfaceContainerHighest = sv.surfaceContainerHighest.toComposeColor(),
-            surfaceContainerLow = sv.surfaceContainerLow.toComposeColor(),
-            surfaceContainerLowest = sv.surfaceContainerLowest.toComposeColor(),
-            primaryFixed = sv.primaryFixed.toComposeColor(),
-            primaryFixedDim = sv.primaryFixedDim.toComposeColor(),
-            onPrimaryFixed = sv.onPrimaryFixed.toComposeColor(),
-            onPrimaryFixedVariant = sv.onPrimaryFixedVariant.toComposeColor(),
-            secondaryFixed = sv.secondaryFixed.toComposeColor(),
-            secondaryFixedDim = sv.secondaryFixedDim.toComposeColor(),
-            onSecondaryFixed = sv.onSecondaryFixed.toComposeColor(),
-            onSecondaryFixedVariant = sv.onSecondaryFixedVariant.toComposeColor(),
-            tertiaryFixed = sv.tertiaryFixed.toComposeColor(),
-            tertiaryFixedDim = sv.tertiaryFixedDim.toComposeColor(),
-            onTertiaryFixed = sv.onTertiaryFixed.toComposeColor(),
-            onTertiaryFixedVariant = sv.onTertiaryFixedVariant.toComposeColor()
-        )
-        return ColorSchemePair(
-            light = mapStored(entity.lightThemeValues),
-            dark = mapStored(entity.darkThemeValues)
-        )
-    }
 
     private fun Color.toHexString(): String {
         return String.format("#%08X", toArgb())
@@ -427,20 +285,7 @@ class ColorSchemeProcessor @Inject constructor(
         colorAccuracyLevel: Int
     ): ColorSchemePair? {
         val cacheKey = buildCacheKey(albumArtUri, paletteStyle, colorAccuracyLevel)
-
-        memoryCache.get(cacheKey)?.let { return it }
-
-        val cachedEntity = withContext(Dispatchers.IO) {
-            albumArtThemeDao.getThemeByUriAndStyle(
-                albumArtUri,
-                paletteStyleCacheKey(paletteStyle, colorAccuracyLevel)
-            )
-        }
-        if (cachedEntity == null) return null
-
-        return mapEntityToColorSchemePair(cachedEntity).also { schemePair ->
-            memoryCache.put(cacheKey, schemePair)
-        }
+        return memoryCache.get(cacheKey)
     }
 
     companion object {

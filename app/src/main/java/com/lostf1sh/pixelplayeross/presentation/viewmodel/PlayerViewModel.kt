@@ -37,7 +37,6 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.lostf1sh.pixelplayeross.R
 import com.lostf1sh.pixelplayeross.data.EotStateHolder
-import com.lostf1sh.pixelplayeross.data.database.AlbumArtThemeDao
 import com.lostf1sh.pixelplayeross.data.media.CoverArtUpdate
 import com.lostf1sh.pixelplayeross.data.model.Album
 import com.lostf1sh.pixelplayeross.data.model.Artist
@@ -64,7 +63,6 @@ import com.lostf1sh.pixelplayeross.data.repository.MusicRepository
 import com.lostf1sh.pixelplayeross.data.service.MusicNotificationProvider
 import com.lostf1sh.pixelplayeross.data.service.MusicService
 import com.lostf1sh.pixelplayeross.data.service.player.DualPlayerEngine
-import com.lostf1sh.pixelplayeross.data.worker.SyncManager
 import com.lostf1sh.pixelplayeross.utils.AppShortcutManager
 import com.lostf1sh.pixelplayeross.utils.ValidatedLyricsImport
 import com.lostf1sh.pixelplayeross.utils.QueueUtils
@@ -246,10 +244,9 @@ private data class ResolvedAlbumSelection(
 class PlayerViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     private val musicRepository: MusicRepository,
+    private val deezerRepository: com.lostf1sh.pixelplayeross.data.repository.DeezerRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val themePreferencesRepository: ThemePreferencesRepository,
-    private val albumArtThemeDao: AlbumArtThemeDao,
-    val syncManager: SyncManager, // Inyectar SyncManager
 
     private val dualPlayerEngine: DualPlayerEngine,
     private val appShortcutManager: AppShortcutManager,
@@ -278,6 +275,9 @@ class PlayerViewModel @Inject constructor(
 
     private val _playerUiState = MutableStateFlow(PlayerUiState())
     val playerUiState: StateFlow<PlayerUiState> = _playerUiState.asStateFlow()
+
+    private var isFlowPlayback: Boolean = false
+    private var currentFlowUrl: String? = null
 
     // Dedicated queue flow so the player sheet's MiniPlayer branch does not
     // recompose whenever the queue changes. Consumers that actually need the
@@ -526,6 +526,42 @@ class PlayerViewModel @Inject constructor(
 
     val albumArtQuality: StateFlow<AlbumArtQuality> = userPreferencesRepository.albumArtQualityFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), AlbumArtQuality.MEDIUM)
+
+    val deezerAudioQuality: StateFlow<com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality> = userPreferencesRepository.deezerAudioQualityFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality.HIGH)
+
+    private val _currentTrackDeezerQuality = MutableStateFlow<com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality?>(null)
+    val currentTrackDeezerQuality: StateFlow<com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality?> = _currentTrackDeezerQuality.asStateFlow()
+
+    fun setDeezerAudioQuality(quality: com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality) {
+        viewModelScope.launch {
+            userPreferencesRepository.setDeezerAudioQuality(quality)
+        }
+    }
+
+    fun changeCurrentTrackQuality(quality: com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality) {
+        val controller = mediaController ?: return
+        val currentIndex = controller.currentMediaItemIndex
+        if (currentIndex == C.INDEX_UNSET) return
+
+        val currentItem = controller.currentMediaItem ?: return
+        val currentUri = currentItem.localConfiguration?.uri ?: return
+        if (currentUri.scheme != "deezer" || currentUri.host != "track") return
+
+        val newUri = currentUri.buildUpon()
+            .clearQuery()
+            .appendQueryParameter("quality", quality.name)
+            .build()
+
+        val newItem = currentItem.buildUpon().setUri(newUri).build()
+        val position = controller.currentPosition.coerceAtLeast(0L)
+
+        controller.replaceMediaItem(currentIndex, newItem)
+        controller.seekTo(currentIndex, position)
+        
+        _currentTrackDeezerQuality.value = quality
+        // Also update local temporary state if needed for UI, but exoPlayer will naturally fire transition
+    }
 
     fun setLyricsSyncOffset(songId: String, offsetMs: Int) {
         lyricsStateHolder.setSyncOffset(songId, offsetMs)
@@ -1030,12 +1066,7 @@ class PlayerViewModel @Inject constructor(
             initialValue = SortOption.SONGS
         )
 
-    val isSyncingStateFlow: StateFlow<Boolean> = syncManager.isSyncing
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = true
-        )
+    val isSyncingStateFlow: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
 
     private val _isInitialDataLoaded = MutableStateFlow(false)
 
@@ -1353,8 +1384,7 @@ class PlayerViewModel @Inject constructor(
 
                 if (songs.isEmpty()) {
                     // Cold start or stale DB state: trigger a sync and retry the bounded query.
-                    Timber.d("[TileDebug] No songs available yet, triggering sync and retrying repository sample")
-                    syncManager.sync()
+                    Timber.d("[TileDebug] No songs available yet")
                     songs = withTimeoutOrNull(30_000L) {
                         var refreshedSongs = emptyList<Song>()
                         while (refreshedSongs.isEmpty()) {
@@ -2667,6 +2697,8 @@ class PlayerViewModel @Inject constructor(
             }
 
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                val qualityParam = mediaItem?.localConfiguration?.uri?.getQueryParameter("quality")
+                _currentTrackDeezerQuality.value = qualityParam?.let { runCatching { com.lostf1sh.pixelplayeross.data.preferences.DeezerAudioQuality.valueOf(it) }.getOrNull() }
                 playbackStateHolder.onPlaybackOccurrenceTransition(mediaItem?.mediaId)
                 preparePlaybackAudioMetadataForMedia(mediaItem?.mediaId)
                 transitionSchedulerJob?.cancel()
@@ -2731,6 +2763,49 @@ class PlayerViewModel @Inject constructor(
                                 themeStateHolder.extractAndGenerateColorScheme(uri, currentUri)
                             }
                             loadLyricsForCurrentSong()
+                        }
+                        
+                        // Check if we need to fetch more Flow tracks
+                        val currentIndex = if (dualPlayerEngine.isUsingWindowedQueue()) {
+                            dualPlayerEngine.getCurrentAbsoluteIndex()
+                        } else {
+                            playerCtrl.currentMediaItemIndex
+                        }
+                        val queueSize = _playerUiState.value.currentPlaybackQueue.size
+                        if (isFlowPlayback && currentFlowUrl != null && queueSize > 0 && currentIndex >= queueSize - 3) {
+                            launch {
+                                try {
+                                    var newSongs = emptyList<Song>()
+                                    var retries = 0
+                                    val currentQueue = _playerUiState.value.currentPlaybackQueue
+
+                                    while (newSongs.isEmpty() && retries < 4) {
+                                        val flowResponse = deezerRepository.getMultiFlowTracks(currentFlowUrl!!)
+                                        val newTracks = flowResponse?.data?.included?.filter { it.type == "track" } ?: emptyList()
+                                        if (newTracks.isNotEmpty()) {
+                                            val fetchedSongs = newTracks.map { track ->
+                                                com.lostf1sh.pixelplayeross.presentation.screens.mapDeezerTrackToSong(track)
+                                            }
+                                            newSongs = fetchedSongs.filter { newSong -> 
+                                                currentQueue.none { it.id == newSong.id }
+                                            }
+                                        }
+                                        retries++
+                                    }
+                                    
+                                    if (newSongs.isNotEmpty()) {
+                                        val updatedQueue = (currentQueue + newSongs).toPlaybackQueue()
+                                        _playerUiState.update { it.copy(currentPlaybackQueue = updatedQueue) }
+                                        queueStateHolder.setOriginalQueueOrder(updatedQueue)
+                                        
+                                        // Add to exo player
+                                        val mediaItems = newSongs.map { buildPlaybackMediaItem(it) }
+                                        playerCtrl.addMediaItems(mediaItems)
+                                    }
+                                } catch (e: Exception) {
+                                    Timber.tag("PlayerViewModel").e(e, "Failed to fetch more flow tracks")
+                                }
+                            }
                         }
                     } ?: run {
                         lyricsStateHolder.cancelLoading()
@@ -2844,11 +2919,14 @@ class PlayerViewModel @Inject constructor(
 
 
     // rebuildPlayerQueue functionality moved to PlaybackStateHolder (simplified)
-    fun playSongs(songsToPlay: List<Song>, startSong: Song, queueName: String = "None", playlistId: String? = null) {
+    fun playSongs(songsToPlay: List<Song>, startSong: Song, queueName: String = "None", playlistId: String? = null, flowUrl: String? = null) {
         cancelPendingFullQueuePlayback()
         val requestToken = beginDirectPlaybackRequest()
         directPlaybackJob = viewModelScope.launch {
             transitionSchedulerJob?.cancel()
+
+            isFlowPlayback = flowUrl != null
+            currentFlowUrl = flowUrl
 
             val validSongs = hydrateSongsIfNeeded(songsToPlay)
             throwIfDirectPlaybackRequestIsStale(requestToken)
@@ -4748,9 +4826,6 @@ class PlayerViewModel @Inject constructor(
         val uris = uriStrings.mapNotNull { it?.takeIf(String::isNotBlank) }.distinct()
         if (uris.isEmpty()) return
 
-        withContext(Dispatchers.IO) {
-            albumArtThemeDao.deleteThemesByUris(uris)
-        }
 
         uris.forEach { uri ->
             // Cache invalidation delegated to ThemeStateHolder (if implemented) or relied on re-generation

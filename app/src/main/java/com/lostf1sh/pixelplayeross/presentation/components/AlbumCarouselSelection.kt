@@ -174,7 +174,7 @@ fun AlbumCarouselSection(
                         )
                 ) { // Enforce 1:1 aspect ratio for the item itself
                     OptimizedAlbumArt(
-                        uri = song.albumArtUriString,
+                        uri = song.highResAlbumArtUriString ?: song.albumArtUriString,
                         title = song.title,
                         modifier = Modifier.fillMaxSize(),
                         targetSize = targetSize

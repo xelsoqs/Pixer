@@ -13,8 +13,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lostf1sh.pixelplayeross.R
-import com.lostf1sh.pixelplayeross.data.database.MusicDao
-import com.lostf1sh.pixelplayeross.data.database.toArtist
+
 import com.lostf1sh.pixelplayeross.data.model.Artist
 import com.lostf1sh.pixelplayeross.data.model.Song
 import com.lostf1sh.pixelplayeross.utils.AudioMeta
@@ -34,7 +33,6 @@ import kotlin.coroutines.resume
 
 @HiltViewModel
 class SongInfoBottomSheetViewModel @Inject constructor(
-    private val musicDao: MusicDao,
     @ApplicationContext private val appContext: Context,
 ) : ViewModel() {
 
@@ -63,36 +61,11 @@ class SongInfoBottomSheetViewModel @Inject constructor(
     val audioMeta: StateFlow<AudioMeta?> = _audioMeta.asStateFlow()
 
     fun loadArtistsForSong(song: Song) {
-        val refs = song.artists
-        if (refs.isEmpty() || refs.size < 2) {
-            _resolvedArtists.value = emptyList()
-            return
-        }
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val ids = refs.map { it.id }.filter { it > 0L }.distinct()
-            val entitiesById = if (ids.isNotEmpty()) {
-                musicDao.getArtistsByIds(ids).associateBy { it.id }
-            } else {
-                emptyMap()
-            }
-            val resolved = refs.map { ref ->
-                entitiesById[ref.id]?.toArtist()
-                    ?: Artist(id = ref.id, name = ref.name, songCount = 0)
-            }
-            _resolvedArtists.value = resolved
-        }
+        _resolvedArtists.value = emptyList()
     }
 
     fun loadAudioMeta(song: Song) {
-        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val meta = AudioMetaUtils.getAudioMetadata(
-                musicDao = musicDao,
-                id = song.id.toLongOrNull() ?: -1L,
-                filePath = song.path,
-                deepScan = false
-            )
-            _audioMeta.value = meta
-        }
+        _audioMeta.value = null
     }
 
     fun getSongLocationInfo(song: Song): SongLocationInfo {

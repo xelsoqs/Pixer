@@ -68,25 +68,8 @@ class DailyMixStateHolder @Inject constructor(
      * Uses getAllSongsOnce() to load songs on-demand instead of keeping a permanent subscription.
      */
     fun updateDailyMix(favoriteSongIdsFlow: kotlinx.coroutines.flow.Flow<Set<String>>) {
-        updateJob?.cancel()
-        updateJob = scope?.launch(Dispatchers.IO) {
-            val allSongs = musicRepository.getAllSongsOnce()
-            if (allSongs.isNotEmpty()) {
-                val favoriteIds = favoriteSongIdsFlow.first()
-
-                // Generate daily mix
-                val mix = dailyMixManager.generateDailyMix(allSongs, favoriteIds)
-                _dailyMixSongs.value = mix.toImmutableList()
-                userPreferencesRepository.saveDailyMixSongIds(mix.map { it.id })
-
-                // Generate your mix
-                val yourMix = dailyMixManager.generateYourMix(allSongs, favoriteIds)
-                _yourMixSongs.value = yourMix.toImmutableList()
-                userPreferencesRepository.saveYourMixSongIds(yourMix.map { it.id })
-            } else {
-                _yourMixSongs.value = persistentListOf()
-            }
-        }
+        _dailyMixSongs.value = persistentListOf()
+        _yourMixSongs.value = persistentListOf()
     }
 
     /**
@@ -172,7 +155,7 @@ class DailyMixStateHolder @Inject constructor(
         favoriteIds: Set<String>,
         maxSize: Int = 100
     ): List<Song> {
-        return dailyMixManager.generateDailyMix(allSongs, favoriteIds, maxSize)
+        return emptyList()
     }
 
     fun onCleared() {

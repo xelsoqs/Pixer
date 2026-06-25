@@ -4,6 +4,25 @@ import com.lostf1sh.pixelplayeross.data.model.Lyrics
 import com.lostf1sh.pixelplayeross.data.model.LyricsSourcePreference
 import com.lostf1sh.pixelplayeross.data.model.Song
 
+class NoLyricsFoundException(message: String) : Exception(message)
+
+data class LyricsRecord(
+    val id: Long,
+    val name: String,
+    val artistName: String,
+    val albumName: String,
+    val duration: Double,
+    val instrumental: Boolean,
+    val plainLyrics: String?,
+    val syncedLyrics: String?
+)
+
+data class LyricsSearchResult(
+    val record: LyricsRecord,
+    val lyrics: Lyrics,
+    val rawLyrics: String
+)
+
 interface LyricsRepository {
     /**
      * Returns already-persisted lyrics without performing any network request.

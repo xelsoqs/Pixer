@@ -38,11 +38,6 @@ class PixelPlayerApplication : Application(), ImageLoaderFactory, Configuration.
     @Inject
     lateinit var imageLoader: dagger.Lazy<ImageLoader>
 
-    @Inject
-    lateinit var navidromeCoilFetcherFactory: dagger.Lazy<com.lostf1sh.pixelplayeross.data.image.NavidromeCoilFetcher.Factory>
-
-    @Inject
-    lateinit var jellyfinCoilFetcherFactory: dagger.Lazy<com.lostf1sh.pixelplayeross.data.image.JellyfinCoilFetcher.Factory>
 
     @Inject
     lateinit var localArtworkCoilFetcherFactory: dagger.Lazy<com.lostf1sh.pixelplayeross.data.image.LocalArtworkCoilFetcher.Factory>
@@ -115,8 +110,6 @@ class PixelPlayerApplication : Application(), ImageLoaderFactory, Configuration.
         return imageLoader.get().newBuilder()
             .components {
                 add(localArtworkCoilFetcherFactory.get())
-                add(navidromeCoilFetcherFactory.get())
-                add(jellyfinCoilFetcherFactory.get())
             }
             .build()
     }
