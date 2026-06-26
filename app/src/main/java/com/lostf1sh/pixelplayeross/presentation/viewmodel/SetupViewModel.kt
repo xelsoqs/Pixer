@@ -78,7 +78,7 @@ class SetupViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
     private val _events = MutableSharedFlow<SetupEvent>()
     val events = _events.asSharedFlow()
-    
+
 
 
     private val fileExplorerStateHolder = FileExplorerStateHolder(userPreferencesRepository, viewModelScope, context)
@@ -145,7 +145,7 @@ class SetupViewModel @Inject constructor(
             }
         }
     }
-    
+
     private data class SetupPrefsUpdate(
         val blocked: Set<String>,
         val mode: String,
@@ -286,7 +286,7 @@ class SetupViewModel @Inject constructor(
             completeSetup(syncAfter = true)
         }
     }
-    
+
 
 
     private suspend fun completeSetup(syncAfter: Boolean) {

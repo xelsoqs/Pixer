@@ -673,6 +673,32 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun requestLocateCurrentFavoriteSong(sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter) {
+        val currentSong = stablePlayerState.value.currentSong ?: return
+
+        viewModelScope.launch {
+            try {
+                val sortedIds = musicRepository.getFavoriteSongIdsSorted(sortOption, storageFilter)
+
+                val unifiedId = currentSong.id.toLongOrNull()
+                    ?: currentSong.contentUriString
+                        .takeIf { it.isNotBlank() }
+                        ?.let { musicRepository.getSongIdByContentUri(it) }
+
+                val index = unifiedId?.let { sortedIds.indexOf(it) } ?: -1
+
+                if (index != -1) {
+                    _scrollToIndexEvent.emit(index)
+                } else {
+                    sendToast(context.getString(R.string.player_song_not_found_in_list))
+                }
+            } catch (e: Exception) {
+                Timber.e(e, "Failed to locate current favorite song")
+                sendToast(context.getString(R.string.player_could_not_locate_song))
+            }
+        }
+    }
+
     fun showAndPlaySongFromLibrary(
         song: Song,
         queueName: String = "Library",
@@ -1441,6 +1467,20 @@ class PlayerViewModel @Inject constructor(
             val favSongs = musicRepository.getFavoriteSongsOnce(playerUiState.value.currentStorageFilter)
             if (favSongs.isNotEmpty()) {
                 playSongsShuffled(favSongs, "Liked Songs (Shuffled)", startAtZero = true)
+            }
+        }
+    }
+
+    fun playFavoriteSongs() {
+        Timber.tag("PlayDebug").d("playFavoriteSongs called.")
+
+        viewModelScope.launch {
+            val favSongs = musicRepository.getFavoriteSongsOnce(
+                playerUiState.value.currentStorageFilter,
+                playerUiState.value.currentFavoriteSortOption
+            )
+            if (favSongs.isNotEmpty()) {
+                playSongs(favSongs, favSongs.first(), "Liked Songs")
             }
         }
     }
@@ -3341,7 +3381,22 @@ class PlayerViewModel @Inject constructor(
         viewModelScope.launch {
             val favoriteSongId = resolveFavoriteSongId(currentSong) ?: return@launch
             val currentlyFavorite = favoriteSongIds.value.contains(favoriteSongId)
-            setFavoriteStatusEverywhere(favoriteSongId, !currentlyFavorite)
+            val targetState = !currentlyFavorite
+            setFavoriteStatusEverywhere(favoriteSongId, targetState)
+            
+            if (currentSong.contentUriString.startsWith("deezer://")) {
+                val numericId = favoriteSongId.toLongOrNull() ?: return@launch
+                val success = if (targetState) {
+                    deezerRepository.likeTrack(numericId)
+                } else {
+                    deezerRepository.unlikeTrack(numericId)
+                }
+                
+                if (!success) {
+                    setFavoriteStatusEverywhere(favoriteSongId, currentlyFavorite)
+                    sendToast(context.getString(R.string.player_could_not_locate_song).replace("locate", if (targetState) "like" else "unlike"))
+                }
+            }
         }
     }
 
@@ -3351,6 +3406,20 @@ class PlayerViewModel @Inject constructor(
             val currentlyFavorite = favoriteSongIds.value.contains(favoriteSongId)
             val targetFavoriteState = if (removing) false else !currentlyFavorite
             setFavoriteStatusEverywhere(favoriteSongId, targetFavoriteState)
+            
+            if (song.contentUriString.startsWith("deezer://")) {
+                val numericId = favoriteSongId.toLongOrNull() ?: return@launch
+                val success = if (targetFavoriteState) {
+                    deezerRepository.likeTrack(numericId)
+                } else {
+                    deezerRepository.unlikeTrack(numericId)
+                }
+                
+                if (!success) {
+                    setFavoriteStatusEverywhere(favoriteSongId, currentlyFavorite)
+                    sendToast(context.getString(R.string.player_could_not_locate_song).replace("locate", if (targetFavoriteState) "like" else "unlike"))
+                }
+            }
         }
     }
 

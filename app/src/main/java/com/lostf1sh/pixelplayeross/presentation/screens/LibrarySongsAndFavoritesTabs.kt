@@ -116,13 +116,12 @@ fun LibraryFavoritesTab(
             items.indexOfFirst { it?.id == currentSongId }
         }
     }
-    // New action just triggers the ViewModel request
-    val locateCurrentSongAction: (() -> Unit)? = remember(currentSongId) {
+    val locateCurrentSongAction: (() -> Unit)? = remember(currentSongId, sortOption, storageFilter) {
         if (currentSongId == null) {
             null
         } else {
             {
-                playerViewModel.requestLocateCurrentSong()
+                playerViewModel.requestLocateCurrentFavoriteSong(sortOption, storageFilter)
             }
         }
     }

@@ -19,9 +19,17 @@ interface SongRepository {
         storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter
     ): Flow<PagingData<Song>>
     suspend fun getFavoriteSongsOnce(
-        storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter
+        storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter,
+        sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption = com.lostf1sh.pixelplayeross.data.model.SortOption.LikedSongDateLiked
     ): List<Song>
     fun getFavoriteSongCountFlow(
         storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter
     ): Flow<Int>
+    fun getFavoriteSongIdsFlow(): Flow<Set<String>>
+    suspend fun getFavoriteSongIdsOnce(): Set<String>
+    suspend fun getFavoriteSongIdsSorted(
+        sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption,
+        storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter
+    ): List<Long>
+    suspend fun setFavoriteStatus(songId: String, isFavorite: Boolean)
 }

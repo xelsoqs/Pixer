@@ -176,7 +176,7 @@ fun SetupScreen(
     val isExplorerReady by setupViewModel.isExplorerReady.collectAsStateWithLifecycle()
     val isCurrentDirectoryResolved by setupViewModel.isCurrentDirectoryResolved.collectAsStateWithLifecycle()
     var selectedBackupUri by remember { mutableStateOf<Uri?>(null) }
-    
+
     var showCornerRadiusOverlay by remember { mutableStateOf(false) }
 
 
@@ -772,6 +772,12 @@ fun DeezerAuthPage(
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "After Auth it will error out, thats fine come back to the app it will work.",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                )
                             }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
@@ -1343,7 +1349,7 @@ fun LibraryLayoutPage(
         ) {
             LibraryHeaderPreview(isCompact = isCompact)
         }
-        
+
         // Controls Section
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1384,7 +1390,7 @@ fun LibraryLayoutPage(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             Text(
                 text = stringResource(R.string.setup_library_layout_footer),
                 style = MaterialTheme.typography.labelMedium,
@@ -1405,7 +1411,7 @@ fun LibraryHeaderPreview(isCompact: Boolean) {
         MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.25f),
         Color.Transparent
     )
-    
+
     Card(
         shape = RoundedCornerShape(
             topStart = 24.dp,
@@ -2038,7 +2044,7 @@ fun NavBarLayoutPage(
         ) {
             NavBarPreview(isDefault = isDefault)
         }
-        
+
         // Controls Section
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -2079,7 +2085,7 @@ fun NavBarLayoutPage(
                             }
                         )
                     }
-                    
+
                     AnimatedVisibility(
                         visible = true, // Always visible now
                         enter =   androidx.compose.animation.expandVertically() + fadeIn(),
@@ -2105,7 +2111,7 @@ fun NavBarLayoutPage(
             }
 
             Spacer(modifier = Modifier.height(16.dp))
-            
+
             Text(
                 text = stringResource(R.string.setup_navbar_footer),
                 style = MaterialTheme.typography.labelMedium,
@@ -2125,7 +2131,7 @@ fun NavBarPreview(isDefault: Boolean) {
         MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.5f), // Lighter top
         MaterialTheme.colorScheme.surfaceContainer, // Darker bottom
     )
-    
+
     // Simulate the bottom of a screen
     Card(
         shape = RoundedCornerShape(24.dp),
@@ -2159,7 +2165,7 @@ fun NavBarPreview(isDefault: Boolean) {
                      )
                  }
             }
-            
+
             // Navbar
             Box(
                 modifier = Modifier.align(Alignment.BottomCenter)

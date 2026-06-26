@@ -12,11 +12,19 @@ import com.lostf1sh.pixelplayeross.data.database.toPlaylist
 import com.lostf1sh.pixelplayeross.data.repository.DeezerRepository
 import kotlinx.coroutines.flow.map
 
+import com.lostf1sh.pixelplayeross.data.database.MusicDao
+import com.lostf1sh.pixelplayeross.data.database.FavoritesDao
+import com.lostf1sh.pixelplayeross.data.database.SongEntity
+import com.lostf1sh.pixelplayeross.data.database.FavoritesEntity
+import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerPlaylistDetailResponse
+
 @Singleton
 class PlaylistPreferencesRepository @Inject constructor(
     private val userPreferencesRepository: UserPreferencesRepository,
     private val localPlaylistDao: LocalPlaylistDao,
-    private val deezerRepository: DeezerRepository
+    private val deezerRepository: DeezerRepository,
+    private val musicDao: MusicDao,
+    private val favoritesDao: FavoritesDao
 ) {
     val userPlaylistsFlow: Flow<List<Playlist>> = localPlaylistDao.observePlaylistsWithSongs().map { entities ->
         entities.map { it.playlist.toPlaylist(it.songs.map { s -> s.songId }) }
@@ -60,12 +68,97 @@ class PlaylistPreferencesRepository @Inject constructor(
         }
     }
 
+    suspend fun syncLovedTracks() {
+        android.util.Log.d("SyncDebug", "syncLovedTracks() started")
+        try {
+            var currentPage = 1
+            val limit = 50
+            val allLovedSongs = mutableListOf<SongEntity>()
+            val allFavorites = mutableListOf<FavoritesEntity>()
+
+            while (true) {
+                android.util.Log.d("SyncDebug", "syncLovedTracks() fetching page $currentPage")
+                val response = deezerRepository.getGcastLovedTracks(page = currentPage, limit = limit)
+                val deezerTracks = response?.data?.included
+                
+                android.util.Log.d("SyncDebug", "syncLovedTracks() response tracks: ${deezerTracks?.size}")
+
+                if (deezerTracks.isNullOrEmpty()) {
+                    android.util.Log.d("SyncDebug", "syncLovedTracks() no more tracks, breaking loop")
+                    break
+                }
+
+                deezerTracks.forEach { track ->
+                    val trackIdStr = track.id
+                    val songId = trackIdStr.toLongOrNull() ?: return@forEach
+                    val song = SongEntity(
+                        id = songId,
+                        title = track.attributes?.title ?: "Unknown Title",
+                        artistName = track.attributes?.artistName ?: "Unknown Artist",
+                        artistId = 0L,
+                        albumName = track.attributes?.albumName ?: "Unknown Album",
+                        albumId = 0L,
+                        contentUriString = "deezer://track/$songId",
+                        albumArtUriString = track.attributes?.image?.medium ?: track.attributes?.image?.large,
+                        duration = (track.attributes?.duration ?: 0) * 1000L,
+                        genre = null,
+                        trackNumber = 0,
+                        discNumber = 0,
+                        filePath = "",
+                        parentDirectoryPath = "",
+                        sourceType = com.lostf1sh.pixelplayeross.data.database.SourceType.DEEZER,
+                    )
+                    allLovedSongs.add(song)
+                    allFavorites.add(FavoritesEntity(songId = songId, isFavorite = true, timestamp = System.currentTimeMillis()))
+                }
+                
+                if (deezerTracks.size < limit) {
+                    break
+                }
+                currentPage++
+            }
+
+            android.util.Log.d("SyncDebug", "syncLovedTracks() fetching done. Total: ${allLovedSongs.size}")
+            if (allLovedSongs.isNotEmpty()) {
+                android.util.Log.d("SyncDebug", "syncLovedTracks() inserting into database...")
+                
+                // Ensure foreign key dependencies exist
+                musicDao.insertArtistsIgnoreConflicts(listOf(
+                    com.lostf1sh.pixelplayeross.data.database.ArtistEntity(
+                        id = 0L,
+                        name = "Unknown Artist",
+                        trackCount = 0
+                    )
+                ))
+                musicDao.insertAlbumsIgnoreConflicts(listOf(
+                    com.lostf1sh.pixelplayeross.data.database.AlbumEntity(
+                        id = 0L,
+                        title = "Unknown Album",
+                        artistName = "Unknown Artist",
+                        artistId = 0L,
+                        albumArtUriString = null,
+                        songCount = 0,
+                        dateAdded = System.currentTimeMillis(),
+                        year = 0
+                    )
+                ))
+
+                musicDao.insertSongsIgnoreConflicts(allLovedSongs)
+                favoritesDao.insertAll(allFavorites)
+                android.util.Log.d("SyncDebug", "syncLovedTracks() inserted successfully.")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SyncDebug", "syncLovedTracks() error: ${e.message}", e)
+            e.printStackTrace()
+        }
+    }
+
     suspend fun optimisticLikePlaylist(playlist: Playlist) {
         val entity = PlaylistEntity(
             id = playlist.id,
             name = playlist.name,
             coverImageUri = playlist.coverImageUri,
-            source = playlist.source ?: "DEEZER",
+            source = playlist.source,
             nbTracks = playlist.nbTracks,
             fans = playlist.fans,
             isPublic = playlist.isPublic,

@@ -15,10 +15,13 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+import com.lostf1sh.pixelplayeross.data.preferences.PlaylistPreferencesRepository
+
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
-    private val userPreferencesRepository: UserPreferencesRepository
+    private val userPreferencesRepository: UserPreferencesRepository,
+    private val playlistPreferencesRepository: PlaylistPreferencesRepository
 ) : ViewModel() {
 
     val isSetupComplete: StateFlow<Boolean?> = userPreferencesRepository.initialSetupDoneFlow
@@ -63,8 +66,11 @@ class MainViewModel @Inject constructor(
      * Should be called after permissions have been granted.
      */
     fun startSync() {
+        android.util.Log.d("SyncDebug", "MainViewModel startSync() called")
         viewModelScope.launch {
-            // musicRepository.syncLovedTracks()
+            android.util.Log.d("SyncDebug", "Calling playlistPreferencesRepository.syncLovedTracks()")
+            playlistPreferencesRepository.syncLovedTracks()
+            android.util.Log.d("SyncDebug", "Finished playlistPreferencesRepository.syncLovedTracks()")
         }
     }
     fun retrySync() {

@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.MyLocation
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.Cloud
@@ -104,7 +105,9 @@ fun LibraryActionRow(
     // Storage Filter
     showStorageFilterButton: Boolean = false,
     currentStorageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter = com.lostf1sh.pixelplayeross.data.model.StorageFilter.ALL,
-    onStorageFilterClick: () -> Unit = {}
+    onStorageFilterClick: () -> Unit = {},
+    // Optional Play Action
+    onPlayClick: (() -> Unit)? = null
 ) {
     val shouldShowImport = isPlaylistTab && showImportButton
 
@@ -150,15 +153,42 @@ fun LibraryActionRow(
                     targetValue = innerCorner,
                     label = "ImportButtonStartCorner"
                 )
+                val hasPlayButton = onPlayClick != null && !isPlaylistTab
+                val shuffleStartCorner = if (hasPlayButton) innerCorner else 26.dp
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // Determine button colors based on shuffle state (not for playlist tab)
                     val buttonContainerColor = MaterialTheme.colorScheme.tertiaryContainer
                     val buttonContentColor = MaterialTheme.colorScheme.onTertiaryContainer
                     
+                    if (hasPlayButton) {
+                        FilledTonalButton(
+                            onClick = onPlayClick!!,
+                            shape = RoundedCornerShape(
+                                topStart = 26.dp, bottomStart = 26.dp,
+                                topEnd = innerCorner, bottomEnd = innerCorner
+                            ),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = buttonContainerColor,
+                                contentColor = buttonContentColor
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp, pressedElevation = 6.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                            modifier = Modifier.height(genHeight)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.PlayArrow,
+                                contentDescription = stringResource(R.string.cd_play),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+
                     FilledTonalButton(
                         onClick = onMainActionClick,
                         shape = RoundedCornerShape(
-                            topStart = 26.dp, bottomStart = 26.dp,
+                            topStart = shuffleStartCorner, bottomStart = shuffleStartCorner,
                             topEnd =  newButtonEndCorner, bottomEnd = newButtonEndCorner
                         ),
                         colors = ButtonDefaults.buttonColors(

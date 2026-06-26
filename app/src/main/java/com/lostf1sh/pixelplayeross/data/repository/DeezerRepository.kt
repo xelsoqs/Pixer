@@ -1,7 +1,9 @@
 package com.lostf1sh.pixelplayeross.data.repository
 
 import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerApiService
+import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerLyricsResponse
 import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerMultiFlowResponse
+import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerPlaylistDetailResponse
 import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerRecommendedPlaylistsResponse
 import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerStreamUrlsResponse
 import com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository
@@ -118,6 +120,42 @@ class DeezerRepository @Inject constructor(
             android.util.Log.e("DeezerRepository", "getUserPlaylists error: ${e.message}", e)
             e.printStackTrace()
             null
+        }
+    }
+
+    suspend fun getGcastLovedTracks(page: Int = 1, limit: Int = 50): DeezerPlaylistDetailResponse? {
+        val auth = getAuthHeader() ?: return null
+        val userId = getUserId() ?: return null
+        return try {
+            val res = deezerApiService.getGcastLovedTracks(userId, auth, page, limit)
+            android.util.Log.d("DeezerRepository", "getGcastLovedTracks size: ${res.data?.included?.size}")
+            res
+        } catch (e: Exception) {
+            android.util.Log.e("DeezerRepository", "getGcastLovedTracks error: ${e.message}", e)
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun likeTrack(trackId: Long): Boolean {
+        val auth = getAuthHeader() ?: return false
+        return try {
+            val res = deezerApiService.likeTrack(trackId, auth)
+            res.isSuccessful
+        } catch (e: Exception) {
+            android.util.Log.e("DeezerRepository", "likeTrack error: ${e.message}", e)
+            false
+        }
+    }
+
+    suspend fun unlikeTrack(trackId: Long): Boolean {
+        val auth = getAuthHeader() ?: return false
+        return try {
+            val res = deezerApiService.unlikeTrack(trackId, auth)
+            res.isSuccessful
+        } catch (e: Exception) {
+            android.util.Log.e("DeezerRepository", "unlikeTrack error: ${e.message}", e)
+            false
         }
     }
 

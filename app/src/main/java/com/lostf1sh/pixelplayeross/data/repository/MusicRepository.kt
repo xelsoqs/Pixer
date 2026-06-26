@@ -56,7 +56,8 @@ interface MusicRepository {
      * Returns all favorite songs as a list (for playback queue on shuffle).
      */
     suspend fun getFavoriteSongsOnce(
-        storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter = com.lostf1sh.pixelplayeross.data.model.StorageFilter.ALL
+        storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter = com.lostf1sh.pixelplayeross.data.model.StorageFilter.ALL,
+        sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption = com.lostf1sh.pixelplayeross.data.model.SortOption.LikedSongDateLiked
     ): List<Song>
 
     /**

@@ -11,16 +11,17 @@ import kotlinx.coroutines.flow.flowOf
 @Singleton
 class MusicRepositoryImpl @Inject constructor(
     @dagger.hilt.android.qualifiers.ApplicationContext private val context: android.content.Context,
-    private val lyricsRepository: LyricsRepository
+    private val lyricsRepository: LyricsRepository,
+    private val songRepository: SongRepository
 ) : MusicRepository {
-    override fun getAudioFiles(): Flow<List<Song>> = flowOf(emptyList())
-    override fun getPaginatedSongs(sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter): Flow<PagingData<Song>> = emptyFlow()
+    override fun getAudioFiles(): Flow<List<Song>> = songRepository.getSongs()
+    override fun getPaginatedSongs(sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter): Flow<PagingData<Song>> = songRepository.getPaginatedSongs(sortOption, storageFilter)
     override fun getPaginatedAlbums( sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter , minTracks: Int  ): Flow<PagingData<Album>> = emptyFlow()
     override fun getPaginatedArtists( sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter  ): Flow<PagingData<Artist>> = emptyFlow()
-    override fun getPaginatedFavoriteSongs( sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter  ): Flow<PagingData<Song>> = emptyFlow()
-    override suspend fun getFavoriteSongsOnce( storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter  ): List<Song> = emptyList()
+    override fun getPaginatedFavoriteSongs( sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter  ): Flow<PagingData<Song>> = songRepository.getPaginatedFavoriteSongs(sortOption, storageFilter)
+    override suspend fun getFavoriteSongsOnce( storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter, sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption ): List<Song> = songRepository.getFavoriteSongsOnce(storageFilter, sortOption)
     override suspend fun getFavoriteSongsPage( limit: Int, offset: Int, sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption , storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter  ): List<Song> = emptyList()
-    override fun getFavoriteSongCountFlow( storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter  ): Flow<Int> = flowOf(0)
+    override fun getFavoriteSongCountFlow( storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter  ): Flow<Int> = songRepository.getFavoriteSongCountFlow(storageFilter)
     override fun getSongCountFlow(): Flow<Int> = flowOf(0)
     override fun getCloudSongCountFlow(): Flow<Int> = flowOf(0)
     override suspend fun getRandomSongs(limit: Int): List<Song> = emptyList()
@@ -54,9 +55,9 @@ class MusicRepositoryImpl @Inject constructor(
     override suspend fun clearSearchHistory() { }
     override fun getMusicByGenre(genreId: String): Flow<List<Song>> = flowOf(emptyList())
     override suspend fun toggleFavoriteStatus(songId: String): Boolean = false
-    override suspend fun setFavoriteStatus(songId: String, isFavorite: Boolean) { }
-    override suspend fun getFavoriteSongIdsOnce(): Set<String> = emptySet()
-    override fun getFavoriteSongIdsFlow(): Flow<Set<String>> = flowOf(emptySet())
+    override suspend fun setFavoriteStatus(songId: String, isFavorite: Boolean) { songRepository.setFavoriteStatus(songId, isFavorite) }
+    override suspend fun getFavoriteSongIdsOnce(): Set<String> = songRepository.getFavoriteSongIdsOnce()
+    override fun getFavoriteSongIdsFlow(): Flow<Set<String>> = songRepository.getFavoriteSongIdsFlow()
     override fun getSong(songId: String): Flow<Song?> = flowOf(null)
     override fun getArtistById(artistId: Long): Flow<Artist?> = flowOf(null)
     override suspend fun getArtistIdByName(name: String): Long? = null
@@ -73,6 +74,6 @@ class MusicRepositoryImpl @Inject constructor(
     override fun getMusicFolders( storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter  ): Flow<List<com.lostf1sh.pixelplayeross.data.model.MusicFolder>> = flowOf(emptyList())
     override suspend fun deleteById(id: Long) { }
     override suspend fun getSongIdsSorted( sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter ): List<Long> = emptyList()
-    override suspend fun getFavoriteSongIdsSorted( sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter ): List<Long> = emptyList()
+    override suspend fun getFavoriteSongIdsSorted( sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter ): List<Long> = songRepository.getFavoriteSongIdsSorted(sortOption, storageFilter)
     override suspend fun getSongIdByContentUri(contentUri: String): Long? = null
 }

@@ -526,18 +526,54 @@ class MediaStoreSongRepository @Inject constructor(
     }
 
     override suspend fun getFavoriteSongsOnce(
-        storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter
+        storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter,
+        sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption
     ): List<Song> = withContext(Dispatchers.IO) {
         val allowedDirs = userPreferencesRepository.allowedDirectoriesFlow.first()
         val blockedDirs = userPreferencesRepository.blockedDirectoriesFlow.first()
         val (allowedParentDirs, applyDirectoryFilter) =
             computeAllowedDirs(allowedDirs, blockedDirs)
-        musicDao.getFavoriteSongsList(
+        musicDao.getFavoriteSongsSortedList(
             allowedParentDirs = allowedParentDirs,
             applyDirectoryFilter = applyDirectoryFilter,
+            sortOrder = sortOption.storageKey,
             filterMode = storageFilter.value
         )
             .map { entity -> entity.toSong().copy(isFavorite = true) }
+    }
+
+    override suspend fun getFavoriteSongIdsSorted(
+        sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption,
+        storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter
+    ): List<Long> = withContext(Dispatchers.IO) {
+        val allowedDirs = userPreferencesRepository.allowedDirectoriesFlow.first()
+        val blockedDirs = userPreferencesRepository.blockedDirectoriesFlow.first()
+        val (allowedParentDirs, applyDirectoryFilter) = computeAllowedDirs(allowedDirs, blockedDirs)
+        musicDao.getFavoriteSongIdsSorted(
+            allowedParentDirs = allowedParentDirs,
+            applyDirectoryFilter = applyDirectoryFilter,
+            sortOrder = sortOption.storageKey,
+            filterMode = storageFilter.value
+        )
+    }
+
+    override suspend fun setFavoriteStatus(songId: String, isFavorite: Boolean) {
+        withContext(Dispatchers.IO) {
+            val id = songId.toLongOrNull() ?: return@withContext
+            if (isFavorite) {
+                favoritesDao.setFavorite(com.lostf1sh.pixelplayeross.data.database.FavoritesEntity(songId = id))
+            } else {
+                favoritesDao.removeFavorite(id)
+            }
+        }
+    }
+
+    override fun getFavoriteSongIdsFlow(): Flow<Set<String>> {
+        return favoritesDao.getFavoriteSongIds().map { list -> list.map { it.toString() }.toSet() }
+    }
+
+    override suspend fun getFavoriteSongIdsOnce(): Set<String> = withContext(Dispatchers.IO) {
+        favoritesDao.getFavoriteSongIdsOnce().map { it.toString() }.toSet()
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

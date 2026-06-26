@@ -39,6 +39,26 @@ interface DeezerApiService {
         @retrofit2.http.Header("authorization") auth: String
     ): DeezerRecommendedPlaylistsResponse
 
+    @retrofit2.http.GET("platform/gcast/user/{user_id}/loved-tracks?include=lyrics")
+    suspend fun getGcastLovedTracks(
+        @retrofit2.http.Path("user_id") userId: Long,
+        @retrofit2.http.Header("authorization") auth: String,
+        @retrofit2.http.Query("page") page: Int = 1,
+        @retrofit2.http.Query("nb_items") limit: Int = 50
+    ): DeezerPlaylistDetailResponse
+
+    @retrofit2.http.POST("platform/generic/track/{track_id}/like")
+    suspend fun likeTrack(
+        @retrofit2.http.Path("track_id") trackId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): retrofit2.Response<Unit>
+
+    @retrofit2.http.DELETE("platform/generic/track/{track_id}/like")
+    suspend fun unlikeTrack(
+        @retrofit2.http.Path("track_id") trackId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): retrofit2.Response<Unit>
+
     @GET("platform/gcast/track/{track_id}/streamUrls")
     suspend fun getStreamUrls(
         @retrofit2.http.Path("track_id") trackId: Long,

@@ -918,6 +918,9 @@ fun LibraryScreen(
                                             else -> playerViewModel.shuffleAllSongs()
                                         }
                                     },
+                                    onPlayClick = if (currentTabId == LibraryTabId.LIKED) {
+                                        { playerViewModel.playFavoriteSongs() }
+                                    } else null,
                                     iconRotation = iconRotation,
                                     showSortButton = sanitizedSortOptions.isNotEmpty(),
                                     showLocateButton = showLocateButton,
@@ -937,7 +940,6 @@ fun LibraryScreen(
                                     showStorageFilterButton = currentTabId == LibraryTabId.PODCASTS ||
                                             currentTabId == LibraryTabId.ALBUMS ||
                                             currentTabId == LibraryTabId.ARTISTS ||
-                                            currentTabId == LibraryTabId.LIKED ||
                                             (ENABLE_FOLDERS_STORAGE_FILTER && false),
                                     currentStorageFilter = playerUiState.currentStorageFilter,
                                     onStorageFilterClick = { playerViewModel.toggleStorageFilter() }
