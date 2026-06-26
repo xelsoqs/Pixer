@@ -453,7 +453,7 @@ fun PlaylistItem(
                     }
                 }
                 Text(
-                    text = formatSongCount(playlist.songIds.size),
+                    text = formatSongCount(playlist.nbTracks ?: playlist.songIds.size),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -50,10 +50,10 @@ class DeezerRepository @Inject constructor(
         }
     }
 
-    suspend fun getPlaylistTracks(playlistId: String): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerPlaylistDetailResponse? {
+    suspend fun getPlaylistTracks(playlistId: String, page: Int = 1, limit: Int = 50): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerPlaylistDetailResponse? {
         val auth = getAuthHeader() ?: return null
         return try {
-            deezerApiService.getPlaylistTracks(playlistId, auth)
+            deezerApiService.getPlaylistTracks(playlistId, auth, page, limit)
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -107,6 +107,20 @@ class DeezerRepository @Inject constructor(
         }
     }
 
+    suspend fun getUserPlaylists(): DeezerRecommendedPlaylistsResponse? {
+        val auth = getAuthHeader() ?: return null
+        val userId = getUserId() ?: return null
+        return try {
+            val res = deezerApiService.getUserPlaylists(userId, auth)
+            android.util.Log.d("DeezerRepository", "getUserPlaylists size: ${res.data?.included?.size}")
+            res
+        } catch (e: Exception) {
+            android.util.Log.e("DeezerRepository", "getUserPlaylists error: ${e.message}", e)
+            e.printStackTrace()
+            null
+        }
+    }
+
     suspend fun getStreamUrls(trackId: Long): DeezerStreamUrlsResponse? {
         val auth = getAuthHeader() ?: return null
         return try {
@@ -141,6 +155,28 @@ class DeezerRepository @Inject constructor(
             android.util.Log.e("DeezerRepository", "getUserMe error: ${e.message}", e)
             e.printStackTrace()
             Result.failure(e)
+        }
+    }
+
+    suspend fun likePlaylist(playlistId: String): Boolean {
+        val auth = getAuthHeader() ?: return false
+        return try {
+            val res = deezerApiService.likePlaylist(playlistId, auth)
+            res.isSuccessful
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
+        }
+    }
+
+    suspend fun unlikePlaylist(playlistId: String): Boolean {
+        val auth = getAuthHeader() ?: return false
+        return try {
+            val res = deezerApiService.unlikePlaylist(playlistId, auth)
+            res.isSuccessful
+        } catch (e: Exception) {
+            e.printStackTrace()
+            false
         }
     }
 }

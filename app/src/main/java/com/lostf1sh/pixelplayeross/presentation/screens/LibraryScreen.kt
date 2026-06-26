@@ -1065,29 +1065,7 @@ fun LibraryScreen(
                                             )
                                         }
                                     }
-                                } else null,
-                                extraContent = {
-                                    if (!isFoldersTab) {
-                                        Spacer(modifier = Modifier.height(12.dp))
-                                        Text(
-                                            text = stringResource(R.string.presentation_batch_d_cloud_sources_heading),
-                                            style = MaterialTheme.typography.headlineSmall,
-                                            fontFamily = com.lostf1sh.pixelplayeross.ui.theme.RoundedSans,
-                                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                                            modifier = Modifier.padding(start = 2.dp, bottom = 8.dp)
-                                        )
-                                        com.lostf1sh.pixelplayeross.presentation.components.LibrarySheetToggleCard(
-                                            label = stringResource(R.string.presentation_batch_d_cloud_only),
-                                            checked = playerUiState.hideLocalMedia,
-                                            boxBackgroundColor = if (playerUiState.hideLocalMedia)
-                                                MaterialTheme.colorScheme.tertiary
-                                            else
-                                                MaterialTheme.colorScheme.surfaceContainerLow,
-                                            boxCornerRadius = if (playerUiState.hideLocalMedia) 18.dp else 50.dp,
-                                            onCheckedChange = { playerViewModel.setHideLocalMedia(it) }
-                                        )
-                                    }
-                                }
+                                } else null
                             )
                         }
 

@@ -33,6 +33,12 @@ interface DeezerApiService {
         @retrofit2.http.Header("authorization") auth: String
     ): DeezerRecommendedPlaylistsResponse
 
+    @GET("platform/gcast/user/{user_id}/playlists?include=lyrics")
+    suspend fun getUserPlaylists(
+        @retrofit2.http.Path("user_id") userId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerRecommendedPlaylistsResponse
+
     @GET("platform/gcast/track/{track_id}/streamUrls")
     suspend fun getStreamUrls(
         @retrofit2.http.Path("track_id") trackId: Long,
@@ -56,10 +62,13 @@ interface DeezerApiService {
         @retrofit2.http.Header("authorization") auth: String
     ): DeezerMultiFlowResponse
 
-    @GET("platform/generic/playlist/{playlist_id}?include=lyrics&nb_items=50")
+    @GET("platform/generic/playlist/{playlist_id}")
     suspend fun getPlaylistTracks(
         @retrofit2.http.Path("playlist_id") playlistId: String,
-        @retrofit2.http.Header("authorization") auth: String
+        @retrofit2.http.Header("authorization") auth: String,
+        @retrofit2.http.Query("page") page: Int = 1,
+        @retrofit2.http.Query("nb_items") limit: Int = 50,
+        @retrofit2.http.Query("include") include: String = "lyrics"
     ): DeezerPlaylistDetailResponse
 
     @GET("platform/generic/lyrics/{track_id}")
@@ -87,4 +96,15 @@ interface DeezerApiService {
         @retrofit2.http.Query("access_token") token: String,
         @retrofit2.http.Query("track_id") trackId: Long
     ): retrofit2.Response<Boolean>
+    @retrofit2.http.POST("platform/generic/playlist/{playlist_id}/like")
+    suspend fun likePlaylist(
+        @retrofit2.http.Path("playlist_id") playlistId: String,
+        @retrofit2.http.Header("authorization") auth: String
+    ): retrofit2.Response<Unit>
+
+    @retrofit2.http.DELETE("platform/generic/playlist/{playlist_id}/like")
+    suspend fun unlikePlaylist(
+        @retrofit2.http.Path("playlist_id") playlistId: String,
+        @retrofit2.http.Header("authorization") auth: String
+    ): retrofit2.Response<Unit>
 }

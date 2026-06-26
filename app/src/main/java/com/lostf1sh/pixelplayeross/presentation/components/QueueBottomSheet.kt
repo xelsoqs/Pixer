@@ -135,6 +135,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.view.HapticFeedbackConstantsCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.media3.common.Player
@@ -2052,12 +2053,30 @@ fun QueuePlaylistSongItem(
                     Spacer(Modifier.width(16.dp))
 
                     Column(Modifier.weight(1f)) {
-                        Text(
-                            song.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            color = if (isCurrentSong) colors.primary else colors.onSurface,
-                            fontWeight = if (isCurrentSong) FontWeight.Bold else FontWeight.Normal,
-                            style = MaterialTheme.typography.bodyLarge
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                song.title, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                color = if (isCurrentSong) colors.primary else colors.onSurface,
+                                fontWeight = if (isCurrentSong) FontWeight.Bold else FontWeight.Normal,
+                                style = MaterialTheme.typography.bodyLarge,
+                                modifier = Modifier.weight(1f, fill = false)
+                            )
+                            if (song.isExplicit) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .background(colors.onSurfaceVariant.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        "E",
+                                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp),
+                                        color = colors.onSurfaceVariant,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                         Text(
                             song.displayArtist, maxLines = 1, overflow = TextOverflow.Ellipsis,
                             style = MaterialTheme.typography.bodyMedium,

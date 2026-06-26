@@ -96,7 +96,8 @@ data class SongEntity(
     @ColumnInfo(name = "title_user_edited", defaultValue = "0") val titleUserEdited: Boolean = false,
     @ColumnInfo(name = "artist_user_edited", defaultValue = "0") val artistUserEdited: Boolean = false,
     @ColumnInfo(name = "album_user_edited", defaultValue = "0") val albumUserEdited: Boolean = false,
-    @ColumnInfo(name = "genre_user_edited", defaultValue = "0") val genreUserEdited: Boolean = false
+    @ColumnInfo(name = "genre_user_edited", defaultValue = "0") val genreUserEdited: Boolean = false,
+    @ColumnInfo(name = "is_explicit", defaultValue = "0") val isExplicit: Boolean = false
 )
 
 private fun SongEntity.toSongInternal(artists: List<ArtistRef>): Song {
@@ -132,7 +133,8 @@ private fun SongEntity.toSongInternal(artists: List<ArtistRef>): Song {
         } else null,
         mimeType = this.mimeType,
         bitrate = this.bitrate,
-        sampleRate = this.sampleRate
+        sampleRate = this.sampleRate,
+        isExplicit = this.isExplicit
     )
 }
 

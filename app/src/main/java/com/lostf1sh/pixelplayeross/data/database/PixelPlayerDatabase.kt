@@ -20,7 +20,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         PlaylistEntity::class,
         PlaylistSongEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 abstract class PixelPlayerDatabase : RoomDatabase() {

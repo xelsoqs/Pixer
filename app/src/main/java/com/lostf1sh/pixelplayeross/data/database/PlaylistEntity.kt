@@ -42,6 +42,14 @@ data class PlaylistEntity(
     val coverShapeDetail4: Float? = null,
     @ColumnInfo(name = "source")
     val source: String = "LOCAL",
+    @ColumnInfo(name = "nb_tracks")
+    val nbTracks: Int? = null,
+    @ColumnInfo(name = "fans")
+    val fans: Int? = null,
+    @ColumnInfo(name = "is_public")
+    val isPublic: Boolean? = null,
+    @ColumnInfo(name = "creator_name")
+    val creatorName: String? = null
 )
 
 fun PlaylistEntity.toPlaylist(songIds: List<String>): Playlist {
@@ -61,6 +69,10 @@ fun PlaylistEntity.toPlaylist(songIds: List<String>): Playlist {
         coverShapeDetail3 = coverShapeDetail3,
         coverShapeDetail4 = coverShapeDetail4,
         source = source,
+        nbTracks = nbTracks,
+        fans = fans,
+        isPublic = isPublic,
+        creatorName = creatorName
     )
 }
 
@@ -80,5 +92,9 @@ fun Playlist.toEntity(): PlaylistEntity {
         coverShapeDetail3 = coverShapeDetail3,
         coverShapeDetail4 = coverShapeDetail4,
         source = source,
+        nbTracks = nbTracks,
+        fans = fans,
+        isPublic = isPublic,
+        creatorName = creatorName
     )
 }

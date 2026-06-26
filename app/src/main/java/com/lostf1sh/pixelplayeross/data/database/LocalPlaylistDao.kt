@@ -24,6 +24,9 @@ interface LocalPlaylistDao {
     @Query("SELECT * FROM playlists WHERE id = :playlistId LIMIT 1")
     suspend fun getPlaylistById(playlistId: String): PlaylistEntity?
 
+    @Query("SELECT id FROM playlists WHERE source = :source")
+    suspend fun getPlaylistIdsBySource(source: String): List<String>
+
     @Query("SELECT COUNT(*) FROM playlists")
     suspend fun getPlaylistCount(): Int
 

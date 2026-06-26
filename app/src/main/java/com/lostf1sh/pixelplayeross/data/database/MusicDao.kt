@@ -72,7 +72,8 @@ private const val SONG_DETAIL_PROJECTION = """
     songs.title_user_edited AS title_user_edited,
     songs.artist_user_edited AS artist_user_edited,
     songs.album_user_edited AS album_user_edited,
-    songs.genre_user_edited AS genre_user_edited
+    songs.genre_user_edited AS genre_user_edited,
+    songs.is_explicit AS is_explicit
 """
 
 // Projection for list queries: excludes lyrics to prevent CursorWindow overflow (2MB limit)
@@ -83,7 +84,7 @@ private const val SONG_LIST_PROJECTION = """
     parent_directory_path, is_favorite, NULL AS lyrics, track_number, disc_number,
     year, date_added, mime_type, bitrate, sample_rate, artists_json, source_type,
     media_store_date_added, media_store_date_modified, title_user_edited,
-    artist_user_edited, album_user_edited, genre_user_edited
+    artist_user_edited, album_user_edited, genre_user_edited, is_explicit
 """
 
 data class DeviceCapabilitySongRow(

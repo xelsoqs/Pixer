@@ -50,6 +50,7 @@ data class PlaylistUiState(
     val currentPlaylistSongs: List<Song> = emptyList(),
     val currentPlaylistDetails: Playlist? = null,
     val isLoading: Boolean = false,
+    val isLoadingMore: Boolean = false,
     val playlistNotFound: Boolean = false,
 
     //Sort option
@@ -147,6 +148,40 @@ class PlaylistViewModel @Inject constructor(
         }
     }
 
+    fun togglePlaylistLike(playlistId: String) {
+        viewModelScope.launch {
+            if (playlistId.startsWith("deezer_")) {
+                val rawId = playlistId.removePrefix("deezer_")
+                val isLiked = _uiState.value.playlists.any { it.id == playlistId }
+                val currentDetails = _uiState.value.currentPlaylistDetails
+
+                if (isLiked) {
+                    playlistPreferencesRepository.optimisticUnlikePlaylist(playlistId)
+                    val success = deezerRepository.unlikePlaylist(rawId)
+                    if (success) {
+                        playlistPreferencesRepository.syncUserPlaylists()
+                    } else {
+                        // Revert optimistic update
+                        currentDetails?.let {
+                            playlistPreferencesRepository.optimisticLikePlaylist(it)
+                        }
+                    }
+                } else {
+                    currentDetails?.let {
+                        playlistPreferencesRepository.optimisticLikePlaylist(it)
+                    }
+                    val success = deezerRepository.likePlaylist(rawId)
+                    if (success) {
+                        playlistPreferencesRepository.syncUserPlaylists()
+                    } else {
+                        // Revert optimistic update
+                        playlistPreferencesRepository.optimisticUnlikePlaylist(playlistId)
+                    }
+                }
+            }
+        }
+    }
+
     fun loadPlaylistDetails(playlistId: String) {
         viewModelScope.launch {
             val shouldKeepExisting = _uiState.value.currentPlaylistDetails?.id == playlistId
@@ -166,7 +201,12 @@ class PlaylistViewModel @Inject constructor(
                         val pseudoPlaylist = Playlist(
                             id = playlistId,
                             name = response.data.attributes?.name ?: "Deezer Playlist",
-                            songIds = response.data.included.map { it.id }
+                            songIds = response.data.included.map { it.id },
+                            nbTracks = response.data.attributes?.nbTracks,
+                            fans = response.data.attributes?.fans,
+                            isPublic = response.data.attributes?.isPublic,
+                            creatorName = response.data.attributes?.creator?.name,
+                            source = "DEEZER"
                         )
 
                         val songsList = response.data.included.mapNotNull { track ->
@@ -184,7 +224,8 @@ class PlaylistViewModel @Inject constructor(
                                 duration = (track.attributes.duration * 1000L).takeIf { it > 0 } ?: 0L,
                                 mimeType = "audio/mpeg",
                                 bitrate = null,
-                                sampleRate = null
+                                sampleRate = null,
+                                isExplicit = track.attributes.explicit ?: false
                             )
                         }
 
@@ -311,6 +352,118 @@ class PlaylistViewModel @Inject constructor(
                         currentPlaylistSongs = emptyList()
                     )
                 }
+            }
+        }
+    }
+
+    fun loadMorePlaylistTracks() {
+        val state = _uiState.value
+        val playlistId = state.currentPlaylistDetails?.id ?: return
+        if (!playlistId.startsWith("deezer_")) return
+        if (state.isLoadingMore || state.isLoading) return
+        
+        val totalTracks = state.currentPlaylistDetails.nbTracks ?: 0
+        val loadedTracks = state.currentPlaylistSongs.size
+        if (loadedTracks >= totalTracks) return
+
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoadingMore = true) }
+            try {
+                val rawId = playlistId.removePrefix("deezer_")
+                val limit = 50
+                val page = (loadedTracks / limit) + 1
+                val response = deezerRepository.getPlaylistTracks(rawId, page = page, limit = limit)
+                if (response?.data != null) {
+                    val newSongs = response.data.included.mapNotNull { track ->
+                        val title = track.attributes?.title ?: return@mapNotNull null
+                        Song(
+                            id = track.id,
+                            title = title,
+                            artist = track.attributes.artistName ?: "Unknown Artist",
+                            artistId = 0L,
+                            album = track.attributes.albumName ?: "Unknown Album",
+                            albumId = 0L,
+                            path = "",
+                            contentUriString = "deezer://track/${track.id}",
+                            albumArtUriString = track.attributes.image?.large ?: track.attributes.image?.medium,
+                            duration = (track.attributes.duration * 1000L).takeIf { it > 0 } ?: 0L,
+                            mimeType = "audio/mpeg",
+                            bitrate = null,
+                            sampleRate = null,
+                            isExplicit = track.attributes.explicit ?: false
+                        )
+                    }
+                    val uniqueNewSongs = newSongs.filter { newSong -> state.currentPlaylistSongs.none { it.id == newSong.id } }
+                    _uiState.update { 
+                        it.copy(
+                            isLoadingMore = false,
+                            currentPlaylistSongs = it.currentPlaylistSongs + uniqueNewSongs
+                        )
+                    }
+                } else {
+                    _uiState.update { it.copy(isLoadingMore = false) }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _uiState.update { it.copy(isLoadingMore = false) }
+            }
+        }
+    }
+
+    fun appendRemainingTracksToPlayer(playerViewModel: PlayerViewModel, shuffle: Boolean) {
+        val state = _uiState.value
+        val playlistId = state.currentPlaylistDetails?.id ?: return
+        if (!playlistId.startsWith("deezer_")) return
+        
+        val totalTracks = state.currentPlaylistDetails.nbTracks ?: 0
+        val loadedTracks = state.currentPlaylistSongs.size
+        if (loadedTracks >= totalTracks) return
+
+        viewModelScope.launch {
+            try {
+                val rawId = playlistId.removePrefix("deezer_")
+                // Background load all remaining pages.
+                val limit = 50
+                var currentPage = (loadedTracks / limit) + 1
+                val allFetchedSongs = mutableListOf<Song>()
+                
+                while (loadedTracks + allFetchedSongs.size < totalTracks) {
+                    val response = deezerRepository.getPlaylistTracks(rawId, page = currentPage, limit = limit)
+                    if (response?.data == null || response.data.included.isEmpty()) break
+                    
+                    val newSongs = response.data.included.mapNotNull { track ->
+                        val title = track.attributes?.title ?: return@mapNotNull null
+                        Song(
+                            id = track.id,
+                            title = title,
+                            artist = track.attributes.artistName ?: "Unknown Artist",
+                            artistId = 0L,
+                            album = track.attributes.albumName ?: "Unknown Album",
+                            albumId = 0L,
+                            path = "",
+                            contentUriString = "deezer://track/${track.id}",
+                            albumArtUriString = track.attributes.image?.large ?: track.attributes.image?.medium,
+                            duration = (track.attributes.duration * 1000L).takeIf { it > 0 } ?: 0L,
+                            mimeType = "audio/mpeg",
+                            bitrate = null,
+                            sampleRate = null,
+                            isExplicit = track.attributes.explicit ?: false
+                        )
+                    }
+                    allFetchedSongs.addAll(newSongs)
+                    currentPage++
+                }
+
+                if (allFetchedSongs.isNotEmpty()) {
+                    val uniqueNewSongs = allFetchedSongs.filter { newSong -> state.currentPlaylistSongs.none { it.id == newSong.id } }
+                    var songsToAppend = uniqueNewSongs
+                    if (shuffle) {
+                        songsToAppend = songsToAppend.shuffled()
+                    }
+                    playerViewModel.appendSongsSilent(songsToAppend)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
             }
         }
     }

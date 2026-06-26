@@ -51,6 +51,10 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.DragIndicator
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -138,6 +142,15 @@ import com.lostf1sh.pixelplayeross.presentation.components.LibrarySortBottomShee
 import com.lostf1sh.pixelplayeross.data.model.SortOption
 import com.lostf1sh.pixelplayeross.data.model.PlaylistShapeType
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+fun formatLikes(likes: Int): String {
+    return when {
+        likes >= 1_000_000 -> String.format("%.1fM", likes / 1_000_000.0)
+        likes >= 1_000 -> String.format("%.1fK", likes / 1_000.0).replace(".0K", "K")
+        else -> likes.toString()
+    }
+}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(
@@ -263,28 +276,68 @@ fun PlaylistDetailScreen(
         topBar = {
             LargeFlexibleTopAppBar(
                 title = {
-                    Text(
-                        modifier = Modifier.padding(start = 8.dp),
-                        text = currentPlaylist?.name ?: fallbackPlaylistName,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            modifier = Modifier.padding(start = 8.dp).weight(1f, fill = false),
+                            text = currentPlaylist?.name ?: fallbackPlaylistName,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (currentPlaylist?.isPublic != null) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(
+                                imageVector = if (currentPlaylist.isPublic == true) Icons.Rounded.Public else Icons.Rounded.Lock,
+                                contentDescription = if (currentPlaylist.isPublic == true) "Public" else "Private",
+                                modifier = Modifier.size(16.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        if (currentPlaylist?.source == "DEEZER") {
+                            val isLiked = uiState.playlists.any { it.id == currentPlaylist.id }
+                            Spacer(modifier = Modifier.width(8.dp))
+                            IconButton(
+                                onClick = { playlistViewModel.togglePlaylistLike(currentPlaylist.id) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                    contentDescription = if (isLiked) "Unlike Playlist" else "Like Playlist",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     scrolledContainerColor = Color.Transparent,
                     containerColor = Color.Transparent
                 ),
                 subtitle = {
-                    Text(
-                        modifier = Modifier.padding(start = 8.dp),
-                        text = stringResource(
-                            R.string.playlist_song_duration_line,
-                            formatSongCount(songsInPlaylist.size),
-                            formatTotalDuration(songsInPlaylist)
-                        ),
-                        style = MaterialTheme.typography.labelMedium.copy(),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Column(modifier = Modifier.padding(start = 8.dp)) {
+                        Text(
+                            text = stringResource(
+                                R.string.playlist_song_duration_line,
+                                formatSongCount(currentPlaylist?.nbTracks ?: songsInPlaylist.size),
+                                formatTotalDuration(songsInPlaylist)
+                            ),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        val collapsed = scrollBehavior.state.collapsedFraction > 0.5f
+                        if (!collapsed && (currentPlaylist?.creatorName != null || currentPlaylist?.fans != null)) {
+                            val extraInfo = buildString {
+                                if (currentPlaylist.creatorName != null) append("By ${currentPlaylist.creatorName}")
+                                if (currentPlaylist.creatorName != null && currentPlaylist.fans != null) append(" • ")
+                                if (currentPlaylist.fans != null) append("${formatLikes(currentPlaylist.fans)} likes")
+                            }
+                            Text(
+                                text = extraInfo,
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 },
                 navigationIcon = {
                     FilledTonalIconButton(
@@ -367,6 +420,9 @@ fun PlaylistDetailScreen(
                                     currentPlaylist.name
                                 )
                                 if (playerStableState.isShuffleEnabled) playerViewModel.toggleShuffle()
+                                if (currentPlaylist.source == "DEEZER") {
+                                    playlistViewModel.appendRemainingTracksToPlayer(playerViewModel, shuffle = playerStableState.isShuffleEnabled)
+                                }
                             }
                         },
                         modifier = Modifier
@@ -408,6 +464,9 @@ fun PlaylistDetailScreen(
                                     playlistId = currentPlaylist.id,
                                     startAtZero = true,
                                 )
+                                if (currentPlaylist.source == "DEEZER") {
+                                    playlistViewModel.appendRemainingTracksToPlayer(playerViewModel, shuffle = true)
+                                }
                             }
                         },
                         modifier = Modifier
@@ -442,7 +501,7 @@ fun PlaylistDetailScreen(
                     }
                 }
 
-                if (!isFolderPlaylist) {
+                if (!isFolderPlaylist && currentPlaylist?.source != "DEEZER") {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -677,6 +736,14 @@ fun PlaylistDetailScreen(
                             .weight(1f)
                             //.padding(horizontal = 10.dp)
                     ) {
+                        LaunchedEffect(listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index, localReorderableSongs.size) {
+                            val lastVisibleIndex = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index
+                            val totalItems = localReorderableSongs.size
+                            if (totalItems > 0 && lastVisibleIndex != null && lastVisibleIndex >= totalItems - 5) {
+                                playlistViewModel.loadMorePlaylistTracks()
+                            }
+                        }
+
                         LazyColumn(
                             state = listState,
                             modifier = Modifier
@@ -782,6 +849,23 @@ fun PlaylistDetailScreen(
                                     )
                                 }
                             }
+                            
+                            if (uiState.isLoadingMore) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(16.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(32.dp),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            strokeWidth = 3.dp
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         ExpressiveScrollBar(
@@ -848,37 +932,39 @@ fun PlaylistDetailScreen(
                         )
                     }
                 }
-                PlaylistActionItem(
-                    icon = painterResource(R.drawable.rounded_edit_24),
-                    label = editPlaylistLabel,
-                    onClick = {
-                        showPlaylistOptionsSheet = false
-                        showEditPlaylistDialog = true
-                    }
-                )
-                PlaylistActionItem(
-                    icon = painterResource(R.drawable.rounded_delete_24),
-                    label = deletePlaylistLabel,
-                    onClick = {
-                        showPlaylistOptionsSheet = false
-                        showDeleteConfirmation = true
-                    }
-                )
+                if (currentPlaylist?.source != "DEEZER") {
+                    PlaylistActionItem(
+                        icon = painterResource(R.drawable.rounded_edit_24),
+                        label = editPlaylistLabel,
+                        onClick = {
+                            showPlaylistOptionsSheet = false
+                            showEditPlaylistDialog = true
+                        }
+                    )
+                    PlaylistActionItem(
+                        icon = painterResource(R.drawable.rounded_delete_24),
+                        label = deletePlaylistLabel,
+                        onClick = {
+                            showPlaylistOptionsSheet = false
+                            showDeleteConfirmation = true
+                        }
+                    )
+                    PlaylistActionItem(
+                        icon = painterResource(R.drawable.rounded_attach_file_24),
+                        label = exportPlaylistLabel,
+                        onClick = {
+                            showPlaylistOptionsSheet = false
+                            val sanitizedName = PlaylistViewModel.sanitizeFileName(currentPlaylist?.name ?: fallbackPlaylistName)
+                            m3uExportLauncher.launch("$sanitizedName.m3u")
+                        }
+                    )
+                }
                 PlaylistActionItem(
                     icon = painterResource(R.drawable.outline_graph_1_24),
                     label = setDefaultTransitionLabel,
                     onClick = {
                         showPlaylistOptionsSheet = false
                         navController.navigateSafely(Screen.EditTransition.createRoute(playlistId))
-                    }
-                )
-                PlaylistActionItem(
-                    icon = painterResource(R.drawable.rounded_attach_file_24),
-                    label = exportPlaylistLabel,
-                    onClick = {
-                        showPlaylistOptionsSheet = false
-                        val sanitizedName = PlaylistViewModel.sanitizeFileName(currentPlaylist?.name ?: fallbackPlaylistName)
-                        m3uExportLauncher.launch("$sanitizedName.m3u")
                     }
                 )
             }

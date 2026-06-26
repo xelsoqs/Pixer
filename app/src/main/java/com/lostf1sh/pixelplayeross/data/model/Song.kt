@@ -38,6 +38,7 @@ data class Song(
     val sampleRate: Int?,
     val navidromeId: String? = null, // Navidrome song ID
     val jellyfinId: String? = null, // Jellyfin item ID
+    val isExplicit: Boolean = false,
 ) : Parcelable {
     /**
      * Returns the display string for artists.

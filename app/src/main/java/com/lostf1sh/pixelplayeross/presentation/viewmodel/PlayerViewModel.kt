@@ -3413,6 +3413,13 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun appendSongsSilent(songs: List<Song>) {
+        mediaController?.let { controller ->
+            val mediaItems = songs.map { buildPlaybackMediaItem(it) }
+            controller.addMediaItems(mediaItems)
+        }
+    }
+
     fun addSongNextToQueue(song: Song) {
         mediaController?.let { controller ->
             val mediaItem = buildPlaybackMediaItem(song)

@@ -545,44 +545,8 @@ fun SongInfoBottomSheet(
                                                     Text(stringResource(R.string.shortcut_playlist_short))
                                                 }
 
-                                                FilledTonalButton(
-                                                    modifier = Modifier
-                                                        .weight(0.5f)
-                                                        .heightIn(min = 66.dp),
-                                                    colors = ButtonDefaults.filledTonalButtonColors(
-                                                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                                                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                                                    ),
-                                                    shape = CircleShape,
-                                                    onClick = {
-                                                        (context as? Activity)?.let { activity ->
-                                                            onDeleteFromDevice(activity, song) { result ->
-                                                                if (result) {
-                                                                    removeFromListTrigger()
-                                                                    onDismiss()
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                ) {
-                                                    Icon(
-                                                        Icons.Default.DeleteForever,
-                                                        contentDescription = stringResource(R.string.delete_action)
-                                                    )
-                                                    Spacer(Modifier.width(8.dp))
-                                                    Text(stringResource(R.string.delete_action))
-                                                }
+                
                                             }
-                                        }
-
-                                        item {
-                                            RingtoneActionButton(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .heightIn(min = 66.dp),
-                                                showText = true,
-                                                onClick = { showTonePickerDialog = true },
-                                            )
                                         }
 
                                         item {
@@ -657,19 +621,6 @@ fun SongInfoBottomSheet(
                                                     )
                                                 }
 
-                                                SongInfoSegmentedListItem(
-                                                    headline = songLocationInfo.label,
-                                                    supporting = songLocationInfo.value,
-                                                    icon = if (songLocationInfo.isCloud) Icons.Rounded.Cloud else Icons.Rounded.AudioFile,
-                                                    iconDescription = stringResource(
-                                                        if (songLocationInfo.isCloud) {
-                                                            R.string.cd_provider_icon
-                                                        } else {
-                                                            R.string.cd_file_icon
-                                                        }
-                                                    ),
-                                                    shape = infoSegmentItemShape,
-                                                )
                                             }
                                         }
                                         item {

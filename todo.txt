@@ -9,7 +9,7 @@ bring back recently played from the main app make it work
 
 lastfm
 discord rpc
-
+deezer based shuffling toggle
 
 ask to enable animated lyrics and crossfade in setup
 more login info stuff in setup
