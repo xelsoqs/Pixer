@@ -317,6 +317,15 @@ sealed class SortOption(
         direction = SortDirection.Descending
     )
 
+    // Podcast Sort Options
+    object PodcastTitleAZ : SortOption(
+        storageKey = "podcast_title_az",
+        displayName = "Title (A-Z)",
+        methodLabel = "Title",
+        methodKey = "podcast_title",
+        direction = SortDirection.Ascending
+    )
+
     val canFlipDirection: Boolean
         get() = direction != null && flipDirection().storageKey != storageKey
 
@@ -412,8 +421,12 @@ sealed class SortOption(
             )
         }
 
+        val PODCASTS: List<SortOption> by lazy {
+            listOf(PodcastTitleAZ)
+        }
+
         private val ALL: List<SortOption> by lazy {
-            SONGS + ALBUMS + ARTISTS + PLAYLISTS + FOLDERS + LIKED
+            SONGS + ALBUMS + ARTISTS + PLAYLISTS + FOLDERS + LIKED + PODCASTS
         }
 
         private val defaultOptionByMethodKey: Map<String, SortOption> by lazy {

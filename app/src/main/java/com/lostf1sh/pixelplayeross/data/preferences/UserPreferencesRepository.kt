@@ -1509,7 +1509,7 @@ constructor(
                     // user's data.
                 }
             } else {
-                preferences[PreferencesKeys.LIBRARY_TABS_ORDER] = json.encodeToString(listOf("SONGS", "ALBUMS", "ARTIST", "PLAYLISTS", "FOLDERS", "LIKED"))
+                preferences[PreferencesKeys.LIBRARY_TABS_ORDER] = json.encodeToString(listOf("PLAYLISTS", "LIKED", "ALBUMS", "ARTIST", "PODCASTS"))
             }
         }
     }

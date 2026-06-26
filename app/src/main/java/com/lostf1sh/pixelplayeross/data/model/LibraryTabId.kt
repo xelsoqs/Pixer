@@ -8,16 +8,15 @@ enum class LibraryTabId(
     val title: String,
     val defaultSort: SortOption
 ) {
-    SONGS("SONGS", "SONGS", SortOption.SongTitleAZ),
     ALBUMS("ALBUMS", "ALBUMS", SortOption.AlbumTitleAZ),
     ARTISTS("ARTIST", "ARTIST", SortOption.ArtistNameAZ),
     PLAYLISTS("PLAYLISTS", "PLAYLISTS", SortOption.PlaylistNameAZ),
-    FOLDERS("FOLDERS", "FOLDERS", SortOption.FolderNameAZ),
-    LIKED("LIKED", "LIKED", SortOption.LikedSongDateLiked);
+    LIKED("LIKED", "LIKED", SortOption.LikedSongDateLiked),
+    PODCASTS("PODCASTS", "PODCASTS", SortOption.PodcastTitleAZ);
 
     companion object {
         fun fromStorageKey(key: String): LibraryTabId =
-            entries.firstOrNull { it.storageKey == key } ?: SONGS
+            entries.firstOrNull { it.storageKey == key } ?: PLAYLISTS
     }
 }
 

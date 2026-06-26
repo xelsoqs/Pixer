@@ -1024,22 +1024,29 @@ class PlayerViewModel @Inject constructor(
 
     val libraryTabsFlow: StateFlow<List<String>> = userPreferencesRepository.libraryTabsOrderFlow
         .map { orderJson ->
-            if (orderJson != null) {
+            val defaultOrder = listOf("PLAYLISTS", "LIKED", "ALBUMS", "ARTIST", "PODCASTS")
+            val order = if (orderJson != null) {
                 try {
-                    Json.decodeFromString<List<String>>(orderJson)
+                    kotlinx.serialization.json.Json.decodeFromString<List<String>>(orderJson).toMutableList()
                 } catch (e: Exception) {
-                    listOf("SONGS", "ALBUMS", "ARTIST", "PLAYLISTS", "FOLDERS", "LIKED")
+                    defaultOrder.toMutableList()
                 }
             } else {
-                listOf("SONGS", "ALBUMS", "ARTIST", "PLAYLISTS", "FOLDERS", "LIKED")
+                defaultOrder.toMutableList()
             }
+            order.remove("SONGS")
+            order.remove("FOLDERS")
+            if (!order.contains("PODCASTS")) {
+                order.add("PODCASTS")
+            }
+            order.toList()
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("SONGS", "ALBUMS", "ARTIST", "PLAYLISTS", "FOLDERS", "LIKED"))
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf("PLAYLISTS", "LIKED", "ALBUMS", "ARTIST", "PODCASTS"))
 
     private val _loadedTabs = MutableStateFlow(emptySet<String>())
     private var lastBlockedDirectories: Set<String>? = null
 
-    private val _currentLibraryTabId = MutableStateFlow(LibraryTabId.SONGS)
+    private val _currentLibraryTabId = MutableStateFlow(LibraryTabId.PLAYLISTS)
     val currentLibraryTabId: StateFlow<LibraryTabId> = _currentLibraryTabId.asStateFlow()
 
     private val _isSortingSheetVisible = MutableStateFlow(false)
@@ -1050,11 +1057,10 @@ class PlayerViewModel @Inject constructor(
             Trace.beginSection("PlayerViewModel.availableSortOptionsMapping")
             try {
                 when (tabId) {
-                    LibraryTabId.SONGS -> SortOption.SONGS
+                    LibraryTabId.PODCASTS -> SortOption.PODCASTS
                     LibraryTabId.ALBUMS -> SortOption.ALBUMS
                     LibraryTabId.ARTISTS -> SortOption.ARTISTS
                     LibraryTabId.PLAYLISTS -> SortOption.PLAYLISTS
-                    LibraryTabId.FOLDERS -> SortOption.FOLDERS
                     LibraryTabId.LIKED -> SortOption.LIKED
                 }
             } finally {
@@ -1063,7 +1069,7 @@ class PlayerViewModel @Inject constructor(
         }.stateIn(
             scope = viewModelScope,
             started = SharingStarted.WhileSubscribed(5000),
-            initialValue = SortOption.SONGS
+            initialValue = SortOption.PLAYLISTS
         )
 
     val isSyncingStateFlow: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
@@ -1644,7 +1650,7 @@ class PlayerViewModel @Inject constructor(
 
         viewModelScope.launch {
             combine(libraryTabsFlow, lastLibraryTabIndexFlow) { tabs, index ->
-                tabs.getOrNull(index)?.toLibraryTabIdOrNull() ?: LibraryTabId.SONGS
+                tabs.getOrNull(index)?.toLibraryTabIdOrNull() ?: LibraryTabId.PLAYLISTS
             }.collect { tabId ->
                 _currentLibraryTabId.value = tabId
             }

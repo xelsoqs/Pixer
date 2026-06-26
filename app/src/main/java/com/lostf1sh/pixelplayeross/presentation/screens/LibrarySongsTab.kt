@@ -278,7 +278,7 @@ fun LibrarySongsTab(
         }
         songs.itemCount == 0 && refreshState is LoadState.NotLoading && reachedEndOfPagination -> {
             LibraryExpressiveEmptyState(
-                tabId = LibraryTabId.SONGS,
+                tabId = LibraryTabId.PODCASTS,
                 storageFilter = storageFilter,
                 bottomBarHeight = bottomBarHeight
             )

@@ -40,7 +40,7 @@ class LibraryTabsStateHolder @Inject constructor() {
             Trace.endSection()
             return
         }
-        val tabId = tabIdentifier.toLibraryTabIdOrNull() ?: LibraryTabId.SONGS
+        val tabId = tabIdentifier.toLibraryTabIdOrNull() ?: LibraryTabId.PLAYLISTS
         currentLibraryTabId.value = tabId
 
         if (loadedTabs.value.contains(tabIdentifier)) {
@@ -54,10 +54,8 @@ class LibraryTabsStateHolder @Inject constructor() {
             Trace.beginSection("PlayerViewModel.onLibraryTabSelected_coroutine_load")
             try {
                 when (tabId) {
-                    LibraryTabId.SONGS -> loadSongs()
                     LibraryTabId.ALBUMS -> loadAlbums()
                     LibraryTabId.ARTISTS -> loadArtists()
-                    LibraryTabId.FOLDERS -> loadFolders()
                     else -> Unit
                 }
                 loadedTabs.update { currentTabs -> currentTabs + tabIdentifier }

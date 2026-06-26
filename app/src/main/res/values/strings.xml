@@ -235,4 +235,8 @@
     <string name="setcat_find_duplicates_subtitle">Scan your library for tracks that appear more than once.</string>
     <string name="setcat_find_duplicates_action">Scan</string>
 
+    <!-- Podcasts -->
+    <string name="lib_empty_podcasts_title">maybe coming soon</string>
+    <string name="lib_empty_podcasts_subtitle">maybe not lol</string>
+
 </resources>

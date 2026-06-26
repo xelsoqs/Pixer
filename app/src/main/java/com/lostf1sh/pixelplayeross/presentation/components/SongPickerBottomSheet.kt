@@ -417,7 +417,7 @@ fun SongPickerSelectionPane(
                     pagedSongs = pagedSongs,
                     selectedSongIds = selectedSongIds,
                     albumShape = albumShape,
-                    tabId = LibraryTabId.SONGS,
+                    tabId = LibraryTabId.PLAYLISTS,
                     storageFilter = storageFilter,
                     modifier = Modifier.weight(1f),
                     contentPadding = contentPadding
