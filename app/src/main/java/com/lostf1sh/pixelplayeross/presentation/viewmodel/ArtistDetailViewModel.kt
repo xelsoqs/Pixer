@@ -37,6 +37,12 @@ data class ArtistDetailUiState(
     val songs: List<Song> = emptyList(),
     val albumSections: List<ArtistAlbumSection> = emptyList(),
     val effectiveImageUrl: String? = null,
+    val topTracks: List<Song> = emptyList(),
+    val deezerAlbums: List<com.lostf1sh.pixelplayeross.data.model.Album> = emptyList(),
+    val similarArtists: List<Artist> = emptyList(),
+    val isLiked: Boolean = false,
+    val fans: Int = 0,
+    val albumsCount: Int = 0,
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -56,6 +62,8 @@ class ArtistDetailViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
     private val artistImageRepository: ArtistImageRepository,
     val themeStateHolder: ThemeStateHolder,
+    private val deezerRepository: com.lostf1sh.pixelplayeross.data.repository.DeezerRepository,
+    private val playlistPreferencesRepository: com.lostf1sh.pixelplayeross.data.preferences.PlaylistPreferencesRepository,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -98,8 +106,28 @@ class ArtistDetailViewModel @Inject constructor(
         loadedArtistId = id
         currentLoadJob?.cancel()
         currentLoadJob = viewModelScope.launch {
-            Timber.tag("ArtistDebug").d("loadArtistData: id=$id")
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            _artistColorScheme.value = null
+            _uiState.update { 
+                it.copy(
+                    isLoading = true, 
+                    error = null,
+                    artist = null,
+                    effectiveImageUrl = null,
+                    songs = emptyList(),
+                    albumSections = emptyList(),
+                    topTracks = emptyList(),
+                    deezerAlbums = emptyList(),
+                    similarArtists = emptyList(),
+                    isLiked = false,
+                    fans = 0
+                ) 
+            }
+            
+            // Launch Deezer API fetches in parallel
+            launch {
+                fetchDeezerData(id)
+            }
+
             try {
                 val artistDetailsFlow = musicRepository.getArtistById(id)
                 val artistSongsFlow = musicRepository.getSongsForArtist(id)
@@ -118,30 +146,19 @@ class ArtistDetailViewModel @Inject constructor(
                     }
                     .collect { (artist, songs) ->
                         if (artist == null) {
-                            _uiState.update {
-                                it.copy(error = context.getString(R.string.could_not_find_artist), isLoading = false)
-                            }
+                            // Instead of failing immediately if local artist is null, we check if we're still loading Deezer data or if Deezer artist exists
+                            // If it's a pure Deezer artist that hasn't synced yet, we might want to still show it.
+                            // But syncLovedArtists should have inserted it already.
+                            // However, we just return for now and let the UI show empty state or loading if needed.
                             return@collect
                         }
 
                         val albumSections = buildAlbumSections(songs)
                         val orderedSongs = albumSections.flatMap { it.songs }
 
-                        // 1) Resolve effective image URL (custom > Deezer, may fetch from API)
-                        val effectiveUrl = try {
-                            artistImageRepository.getEffectiveArtistImageUrl(
-                                artistId = artist.id,
-                                artistName = artist.name
-                            )
-                        } catch (e: Exception) {
-                            Timber.tag("ArtistDebug").w("Failed to resolve effective artist image: ${e.message}")
-                            artist.effectiveImageUrl
-                        }
+                        val effectiveUrl = artist.imageUrl
 
                         // 2) Pre-warm the color scheme BEFORE emitting isLoading = false.
-                        //    getOrGenerateColorScheme checks the in-memory LRU first (≈0 ms if cached),
-                        //    then the DB cache (fast), and only generates from scratch ~on first visit.
-                        //    Either way, the scheme is ready before the screen first renders.
                         val newScheme = if (!effectiveUrl.isNullOrBlank()) {
                             try {
                                 themeStateHolder.getOrGenerateColorScheme(effectiveUrl)
@@ -151,18 +168,17 @@ class ArtistDetailViewModel @Inject constructor(
                             }
                         } else null
 
-                        // 3) Atomically publish state + pre-warmed color scheme.
-                        //    Both flows update before the Compose frame runs, so no intermediate null frame.
                         _artistColorScheme.value = newScheme
-                        _uiState.value = ArtistDetailUiState(
-                            artist = artist.copy(
-                                imageUrl = if (artist.customImageUri.isNullOrBlank()) effectiveUrl else artist.imageUrl
-                            ),
-                            songs = orderedSongs,
-                            albumSections = albumSections,
-                            effectiveImageUrl = effectiveUrl,
-                            isLoading = false
-                        )
+                        _uiState.update {
+                            it.copy(
+                                artist = artist.copy(
+                                    imageUrl = if (artist.customImageUri.isNullOrBlank()) effectiveUrl else artist.imageUrl
+                                ),
+                                songs = orderedSongs,
+                                albumSections = albumSections,
+                                effectiveImageUrl = effectiveUrl
+                            )
+                        }
                     }
 
             } catch (e: Exception) {
@@ -176,91 +192,143 @@ class ArtistDetailViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Called from the UI when the user selects a custom image from the system photo picker.
-     * Copies the image to internal storage, persists the path to DB, and triggers palette regeneration.
-     */
+    private suspend fun fetchDeezerData(id: Long) {
+        try {
+            val artistInfo = deezerRepository.getArtistInfo(id)
+            val topTracksResponse = deezerRepository.getArtistTopTracks(id)
+            val albumsResponse = deezerRepository.getArtistAlbums(id)
+            val similarArtistsResponse = deezerRepository.getSimilarArtists(id)
+            val lovedArtistsResponse = deezerRepository.getGcastLovedArtists()
+
+            val isLiked = lovedArtistsResponse?.data?.included?.any { it.id == id.toString() } == true
+            val fans = artistInfo?.fanCount ?: 0
+
+            val topTracks = topTracksResponse?.data?.included?.mapIndexed { index, track ->
+                Song(
+                    id = track.id,
+                    title = track.attributes?.title ?: "Unknown Title",
+                    artist = track.attributes?.artistName ?: artistInfo?.name ?: "",
+                    artistId = id,
+                    album = track.attributes?.albumName ?: "Unknown Album",
+                    albumId = 0L,
+                    path = "",
+                    contentUriString = "deezer://track/${track.id}",
+                    albumArtUriString = track.attributes?.image?.large,
+                    duration = (track.attributes?.duration ?: 0) * 1000L,
+                    genre = null,
+                    trackNumber = index + 1,
+                    discNumber = 1,
+                    dateAdded = System.currentTimeMillis(),
+                    dateModified = System.currentTimeMillis(),
+                    year = 0,
+                    mimeType = null,
+                    bitrate = null,
+                    sampleRate = null,
+                    isExplicit = track.attributes?.explicit ?: false
+                )
+            } ?: emptyList()
+
+            val deezerAlbums = albumsResponse?.data?.included?.mapNotNull { item ->
+                item.id?.toLongOrNull()?.let { albumId ->
+                    com.lostf1sh.pixelplayeross.data.model.Album(
+                        id = albumId,
+                        title = item.attributes?.name ?: "Unknown Album",
+                        artist = item.attributes?.artist?.name ?: artistInfo?.name ?: "",
+                        albumArtUriString = item.attributes?.image?.let { it.full ?: it.large ?: it.medium },
+                        songCount = item.attributes?.nbTracks ?: 0,
+                        dateAdded = System.currentTimeMillis(),
+                        year = item.attributes?.releaseDate?.substring(0, 4)?.toIntOrNull() ?: 0,
+                        albumArtist = item.attributes?.artist?.name ?: artistInfo?.name ?: ""
+                    )
+                }
+            } ?: emptyList()
+
+            val similarArtists = similarArtistsResponse?.data?.included?.mapNotNull { item ->
+                item.attributes?.let { attr ->
+                    Artist(
+                        id = attr.id,
+                        name = attr.name ?: "Unknown Artist",
+                        songCount = 0,
+                        imageUrl = attr.pictures?.let { it.full ?: it.large ?: it.medium },
+                        customImageUri = null,
+                        fanCount = attr.nbFans,
+                        albumCount = 0
+                    )
+                }
+            } ?: emptyList()
+
+            _uiState.update { currentState ->
+                var currentArtist = currentState.artist
+                var effectiveImageUrl = currentState.effectiveImageUrl
+                if (currentArtist == null && artistInfo != null) {
+                    val fallbackImageUrl = artistInfo.pictureXl ?: artistInfo.pictureBig ?: artistInfo.pictureMedium
+                    currentArtist = Artist(
+                        id = artistInfo.id,
+                        name = artistInfo.name,
+                        songCount = artistInfo.albumCount,
+                        imageUrl = fallbackImageUrl,
+                        customImageUri = null,
+                        fanCount = artistInfo.fanCount,
+                        albumCount = artistInfo.albumCount
+                    )
+                    effectiveImageUrl = fallbackImageUrl
+                    
+                    // Pre-warm color scheme for Deezer artist
+                    if (!fallbackImageUrl.isNullOrBlank() && _artistColorScheme.value == null) {
+                        try {
+                            val newScheme = themeStateHolder.getOrGenerateColorScheme(fallbackImageUrl)
+                            _artistColorScheme.value = newScheme
+                        } catch (e: Exception) {
+                            Timber.tag("ArtistDebug").w("Deezer Color scheme pre-warm failed: ${e.message}")
+                        }
+                    }
+                }
+
+                currentState.copy(
+                    artist = currentArtist,
+                    topTracks = topTracks,
+                    deezerAlbums = deezerAlbums,
+                    similarArtists = similarArtists,
+                    effectiveImageUrl = currentState.effectiveImageUrl ?: effectiveImageUrl,
+                    isLiked = isLiked,
+                    fans = fans,
+                    albumsCount = artistInfo?.albumCount ?: 0,
+                    isLoading = false
+                )
+            }
+        } catch (e: Exception) {
+            Timber.tag("ArtistDebug").e(e, "Exception fetching Deezer data for artist $id")
+            _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    fun toggleArtistLike() {
+        val artistId = loadedArtistId ?: return
+        val currentLiked = _uiState.value.isLiked
+        
+        // Optimistic update
+        _uiState.update { it.copy(isLiked = !currentLiked) }
+        
+        viewModelScope.launch {
+            val success = if (currentLiked) {
+                deezerRepository.unlikeArtist(artistId)
+            } else {
+                deezerRepository.likeArtist(artistId)
+            }
+            
+            if (!success) {
+                // Revert on failure
+                _uiState.update { it.copy(isLiked = currentLiked) }
+            } else {
+                // Sync the database to reflect the change in the library tab immediately
+                playlistPreferencesRepository.syncLovedArtists()
+            }
+        }
+    }
+
     /** Re-attempts loading the artist after a failure (wired to the error-state retry button). */
     fun retry() {
         loadedArtistId?.let { loadArtistData(it) }
-    }
-
-    fun setCustomImage(sourceUri: Uri) {
-        val artistId = _uiState.value.artist?.id ?: return
-        viewModelScope.launch {
-            try {
-                val internalPath = artistImageRepository.setCustomArtistImage(context, artistId, sourceUri)
-                if (!internalPath.isNullOrBlank()) {
-                    val oldEffectiveUrl = _uiState.value.effectiveImageUrl
-
-                    // Regenerate palette from the new image url — invalidate old and warm-up new
-                    if (!oldEffectiveUrl.isNullOrBlank() && oldEffectiveUrl != internalPath) {
-                        themeStateHolder.forceRegenerateColorScheme(oldEffectiveUrl)
-                    }
-                    val newScheme = try {
-                        themeStateHolder.forceRegenerateColorScheme(internalPath)
-                        themeStateHolder.getOrGenerateColorScheme(internalPath)
-                    } catch (e: Exception) {
-                        Timber.tag("ArtistDebug").w("Failed to regenerate color scheme for custom image: ${e.message}")
-                        null
-                    }
-
-                    _artistColorScheme.value = newScheme
-                    _uiState.update { state ->
-                        // Cache-busting: add timestamp to internalPath to force Coil to reload
-                        val effectiveUrlWithBust = "$internalPath?t=${System.currentTimeMillis()}"
-                        state.copy(
-                            effectiveImageUrl = effectiveUrlWithBust,
-                            artist = state.artist?.copy(customImageUri = internalPath)
-                        )
-                    }
-                }
-            } catch (e: Exception) {
-                Timber.tag("ArtistDebug").e("Failed to set custom image: ${e.message}")
-            }
-        }
-    }
-
-    /**
-     * Called when the user wants to revert to the Deezer-sourced image.
-     */
-    fun clearCustomImage() {
-        val artist = _uiState.value.artist ?: return
-        viewModelScope.launch {
-            try {
-                val oldEffectiveUrl = _uiState.value.effectiveImageUrl
-                artistImageRepository.clearCustomArtistImage(context, artist.id)
-
-                // Fall back to Deezer URL
-                val deezerUrl = artistImageRepository.getArtistImageUrl(artist.name, artist.id)
-                val newEffectiveUrl = deezerUrl.takeIf { !it.isNullOrBlank() }
-
-                // Invalidate old custom image palette
-                if (!oldEffectiveUrl.isNullOrBlank()) {
-                    themeStateHolder.forceRegenerateColorScheme(oldEffectiveUrl)
-                }
-
-                val newScheme = if (!newEffectiveUrl.isNullOrBlank()) {
-                    try {
-                        themeStateHolder.getOrGenerateColorScheme(newEffectiveUrl)
-                    } catch (e: Exception) {
-                        Timber.tag("ArtistDebug").w("Failed to regenerate palette after clear: ${e.message}")
-                        null
-                    }
-                } else null
-
-                _artistColorScheme.value = newScheme
-                _uiState.update { state ->
-                    state.copy(
-                        effectiveImageUrl = newEffectiveUrl,
-                        artist = state.artist?.copy(customImageUri = null, imageUrl = deezerUrl)
-                    )
-                }
-
-            } catch (e: Exception) {
-                Timber.tag("ArtistDebug").e("Failed to clear custom image: ${e.message}")
-            }
-        }
     }
 
     fun removeSongFromAlbumSection(songId: String) {

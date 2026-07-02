@@ -1303,21 +1303,23 @@ interface MusicDao {
     ): Flow<List<ArtistEntity>>
 
     @Query("""
-        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri,
+        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri, artists.fan_count, artists.album_count,
                COUNT(DISTINCT songs.id) AS track_count
-        FROM songs
-        INNER JOIN song_artist_cross_ref ON song_artist_cross_ref.song_id = songs.id
-        INNER JOIN artists ON artists.id = song_artist_cross_ref.artist_id
-        WHERE (:applyDirectoryFilter = 0 OR songs.source_type != 0 OR songs.parent_directory_path IN (:allowedParentDirs))
-        AND (
-            :filterMode = 0
-            OR (
-                :filterMode = 1
-                AND songs.source_type = 0
-            )
-            OR (
-                :filterMode = 2
-                AND songs.source_type != 0
+        FROM artists
+        LEFT JOIN song_artist_cross_ref ON song_artist_cross_ref.artist_id = artists.id
+        LEFT JOIN songs ON songs.id = song_artist_cross_ref.song_id
+        WHERE (songs.id IS NULL AND :filterMode != 1) OR (
+            (:applyDirectoryFilter = 0 OR songs.source_type != 0 OR songs.parent_directory_path IN (:allowedParentDirs))
+            AND (
+                :filterMode = 0
+                OR (
+                    :filterMode = 1
+                    AND songs.source_type = 0
+                )
+                OR (
+                    :filterMode = 2
+                    AND songs.source_type != 0
+                )
             )
         )
         GROUP BY artists.id
@@ -1344,20 +1346,22 @@ interface MusicDao {
      * track-artist query so toggling the preference only swaps which query backs the tab.
      */
     @Query("""
-        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri,
+        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri, artists.fan_count, artists.album_count,
                COUNT(DISTINCT songs.id) AS track_count
-        FROM songs
-        INNER JOIN artists ON artists.id = songs.album_artist_id
-        WHERE (:applyDirectoryFilter = 0 OR songs.source_type != 0 OR songs.parent_directory_path IN (:allowedParentDirs))
-        AND (
-            :filterMode = 0
-            OR (
-                :filterMode = 1
-                AND songs.source_type = 0
-            )
-            OR (
-                :filterMode = 2
-                AND songs.source_type != 0
+        FROM artists
+        LEFT JOIN songs ON songs.album_artist_id = artists.id
+        WHERE (songs.id IS NULL AND :filterMode != 1) OR (
+            (:applyDirectoryFilter = 0 OR songs.source_type != 0 OR songs.parent_directory_path IN (:allowedParentDirs))
+            AND (
+                :filterMode = 0
+                OR (
+                    :filterMode = 1
+                    AND songs.source_type = 0
+                )
+                OR (
+                    :filterMode = 2
+                    AND songs.source_type != 0
+                )
             )
         )
         GROUP BY artists.id
@@ -1377,7 +1381,7 @@ interface MusicDao {
     ): PagingSource<Int, ArtistEntity>
 
     @Query("""
-        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri,
+        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri, artists.fan_count, artists.album_count,
                COUNT(DISTINCT songs.id) AS track_count
         FROM songs
         INNER JOIN song_artist_cross_ref ON song_artist_cross_ref.song_id = songs.id
@@ -1447,7 +1451,7 @@ interface MusicDao {
     suspend fun getAllArtistsListRaw(): List<ArtistEntity>
 
     @Query("""
-        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri,
+        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri, artists.fan_count, artists.album_count,
                COUNT(DISTINCT songs.id) AS track_count
         FROM songs
         INNER JOIN song_artist_cross_ref ON song_artist_cross_ref.song_id = songs.id
@@ -1567,6 +1571,24 @@ interface MusicDao {
           AND NOT EXISTS (SELECT 1 FROM songs WHERE songs.album_artist_id = artists.id)
     """)
     suspend fun deleteOrphanedArtists()
+
+    @Query("""
+        DELETE FROM artists
+        WHERE id = :artistId
+          AND NOT EXISTS (SELECT 1 FROM song_artist_cross_ref WHERE song_artist_cross_ref.artist_id = artists.id)
+          AND NOT EXISTS (SELECT 1 FROM songs WHERE songs.artist_id = artists.id)
+          AND NOT EXISTS (SELECT 1 FROM songs WHERE songs.album_artist_id = artists.id)
+    """)
+    suspend fun deleteArtistIfOrphaned(artistId: Long)
+
+    @Query("""
+        DELETE FROM artists
+        WHERE id NOT IN (:lovedArtistIds)
+          AND NOT EXISTS (SELECT 1 FROM song_artist_cross_ref WHERE song_artist_cross_ref.artist_id = artists.id)
+          AND NOT EXISTS (SELECT 1 FROM songs WHERE songs.artist_id = artists.id)
+          AND NOT EXISTS (SELECT 1 FROM songs WHERE songs.album_artist_id = artists.id)
+    """)
+    suspend fun deleteUnlovedArtists(lovedArtistIds: List<Long>)
 
     // --- Favorite Operations ---
     @Query("UPDATE songs SET is_favorite = :isFavorite WHERE id = :songId")
@@ -1800,7 +1822,7 @@ interface MusicDao {
      * Get all artists with their song counts computed from the junction table.
      */
     @Query("""
-        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri,
+        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri, artists.fan_count, artists.album_count,
                COUNT(DISTINCT song_artist_cross_ref.song_id) AS track_count
         FROM artists
         LEFT JOIN song_artist_cross_ref ON artists.id = song_artist_cross_ref.artist_id
@@ -1813,7 +1835,7 @@ interface MusicDao {
      * Get all artists with song counts, filtered by allowed directories.
      */
     @Query("""
-        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri,
+        SELECT artists.id, artists.name, artists.image_url, artists.custom_image_uri, artists.fan_count, artists.album_count,
                COUNT(DISTINCT songs.id) AS track_count
         FROM songs
         INNER JOIN song_artist_cross_ref ON song_artist_cross_ref.song_id = songs.id

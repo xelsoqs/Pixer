@@ -55,6 +55,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Deselect
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -905,13 +906,22 @@ fun LibraryScreen(
                                     )
                                 }
                             } else {
+                                val showMainButtons = currentTabId == LibraryTabId.LIKED || 
+                                    currentTabId == LibraryTabId.PLAYLISTS || 
+                                    currentTabId == LibraryTabId.ALBUMS || 
+                                    currentTabId == LibraryTabId.ARTISTS
+
+                                val isRandomButton = currentTabId == LibraryTabId.PLAYLISTS || 
+                                    currentTabId == LibraryTabId.ALBUMS || 
+                                    currentTabId == LibraryTabId.ARTISTS
+
                                 LibraryActionRow(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(end = 4.dp),
                                     onMainActionClick = {
-                                        when (tabTitles.getOrNull(currentTabIndex)?.toLibraryTabIdOrNull()) {
-                                            LibraryTabId.PLAYLISTS -> showPlaylistCreationTypeDialog = true
+                                        when (currentTabId) {
+                                            LibraryTabId.PLAYLISTS -> playerViewModel.shuffleRandomPlaylist()
                                             LibraryTabId.LIKED -> playerViewModel.shuffleFavoriteSongs()
                                             LibraryTabId.ALBUMS -> playerViewModel.shuffleRandomAlbum()
                                             LibraryTabId.ARTISTS -> playerViewModel.shuffleRandomArtist()
@@ -921,6 +931,8 @@ fun LibraryScreen(
                                     onPlayClick = if (currentTabId == LibraryTabId.LIKED) {
                                         { playerViewModel.playFavoriteSongs() }
                                     } else null,
+                                    customMainActionIcon = if (isRandomButton) Icons.Rounded.PlayArrow else null,
+                                    customMainActionText = if (isRandomButton) "Random" else null,
                                     iconRotation = iconRotation,
                                     showSortButton = sanitizedSortOptions.isNotEmpty(),
                                     showLocateButton = showLocateButton,
@@ -938,6 +950,7 @@ fun LibraryScreen(
                                     onNavigateBack = { playerViewModel.navigateBackFolder() },
                                     isShuffleEnabled = isShuffleEnabled,
                                     showStorageFilterButton = false,
+                                    showMainActionButtons = showMainButtons,
                                     currentStorageFilter = playerUiState.currentStorageFilter,
                                     onStorageFilterClick = { playerViewModel.toggleStorageFilter() }
                                 )
@@ -1090,6 +1103,7 @@ fun LibraryScreen(
                                         tabId = LibraryTabId.PODCASTS,
                                         storageFilter = playerUiState.currentStorageFilter,
                                         bottomBarHeight = bottomBarHeightDp,
+                                        isSyncing = playerUiState.isSyncingLibrary,
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
@@ -1120,7 +1134,8 @@ fun LibraryScreen(
                                             onAlbumLongPress = onAlbumLongPress,
                                             onAlbumSelectionToggle = onAlbumSelectionToggle,
                                             getSelectionIndex = getAlbumSelectionIndex,
-                                            storageFilter = playerUiState.currentStorageFilter
+                                            storageFilter = playerUiState.currentStorageFilter,
+                                            isSyncingLibrary = playerUiState.isSyncingLibrary
                                         )
                                     }
 
@@ -1141,7 +1156,8 @@ fun LibraryScreen(
                                             },
                                             isRefreshing = isRefreshing,
                                             onRefresh = onRefresh,
-                                            storageFilter = playerUiState.currentStorageFilter
+                                            storageFilter = playerUiState.currentStorageFilter,
+                                            isSyncingLibrary = playerUiState.isSyncingLibrary
                                         )
                                     }
 
@@ -1159,7 +1175,8 @@ fun LibraryScreen(
                                             selectedPlaylistIds = selectedPlaylistIds,
                                             onPlaylistLongPress = onPlaylistLongPress,
                                             onPlaylistSelectionToggle = onPlaylistSelectionToggle,
-                                            onPlaylistOptionsClick = { showPlaylistMultiSelectionSheet = true }
+                                            onPlaylistOptionsClick = { showPlaylistMultiSelectionSheet = true },
+                                            isSyncingLibrary = playerUiState.isSyncingLibrary
                                         )
                                     }
 
@@ -2823,7 +2840,23 @@ fun ArtistListItem(artist: Artist, onClick: () -> Unit, isLoading: Boolean = fal
                 Spacer(modifier = Modifier.width(16.dp))
                 Column {
                     Text(artist.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(formatSongCount(artist.songCount), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    val statsText = remember(artist) {
+                        if (artist.fanCount > 0) {
+                            val fansStr = when {
+                                artist.fanCount >= 1_000_000 -> String.format(java.util.Locale.getDefault(), "%.1fM fans", artist.fanCount / 1_000_000f)
+                                artist.fanCount >= 1_000 -> String.format(java.util.Locale.getDefault(), "%.1fK fans", artist.fanCount / 1_000f)
+                                else -> "${artist.fanCount} fans"
+                            }
+                            if (artist.albumCount > 0) "$fansStr • ${artist.albumCount} albums" else fansStr
+                        } else if (artist.songCount > 0) {
+                            formatSongCount(artist.songCount) // We'll just define this below or use the existing one
+                        } else {
+                            ""
+                        }
+                    }
+                    if (statsText.isNotEmpty()) {
+                        Text(statsText, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
             }
         }

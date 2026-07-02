@@ -230,3 +230,25 @@ data class DeezerAlbumItemAttributes(
     @SerializedName("duration") val duration: Int = 0,
     @SerializedName("release_date") val releaseDate: String? = null
 )
+
+// Artist list models (used for similar artists and loved artists)
+data class DeezerArtistsListResponse(
+    @SerializedName("data") val data: DeezerArtistsListData? = null
+)
+
+data class DeezerArtistsListData(
+    @SerializedName("included") val included: List<DeezerArtistItem>? = null
+)
+
+data class DeezerArtistItem(
+    @SerializedName("id") val id: String? = null,
+    @SerializedName("type") val type: String? = null,
+    @SerializedName("attributes") val attributes: DeezerArtistItemAttributes? = null
+)
+
+data class DeezerArtistItemAttributes(
+    @SerializedName("id") val id: Long = 0,
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("nbFans") val nbFans: Int = 0,
+    @SerializedName("pictures") val pictures: DeezerImage? = null
+)

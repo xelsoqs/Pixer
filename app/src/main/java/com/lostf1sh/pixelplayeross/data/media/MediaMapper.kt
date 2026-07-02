@@ -45,6 +45,8 @@ class MediaMapper @Inject constructor(
                 .orEmpty()
         val id = mediaItem.mediaId
 
+        val isExplicit = extras?.getBoolean(MediaItemBuilder.EXTERNAL_EXTRA_IS_EXPLICIT) ?: false
+
         // Note: This creates a partial Song object. 
         // Some fields like path, genre, year might be missing if not in extras.
         return Song(
@@ -61,7 +63,8 @@ class MediaMapper @Inject constructor(
             dateAdded = dateAdded,
             mimeType = null, 
             bitrate = null,
-            sampleRate = null
+            sampleRate = null,
+            isExplicit = isExplicit
         )
     }
 }

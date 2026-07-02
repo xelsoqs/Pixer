@@ -94,7 +94,8 @@ fun LibraryAlbumsTab(
     onAlbumLongPress: (Album) -> Unit = {},
     onAlbumSelectionToggle: (Album) -> Unit = {},
     getSelectionIndex: (Long) -> Int? = { null },
-    storageFilter: StorageFilter = StorageFilter.ALL
+    storageFilter: StorageFilter = StorageFilter.ALL,
+    isSyncingLibrary: Boolean = false
 ) {
     val gridState = rememberLazyGridState()
     val listState = rememberLazyListState()
@@ -302,7 +303,8 @@ fun LibraryAlbumsTab(
             LibraryExpressiveEmptyState(
                 tabId = LibraryTabId.ALBUMS,
                 storageFilter = storageFilter,
-                bottomBarHeight = bottomBarHeight
+                bottomBarHeight = bottomBarHeight,
+                isSyncing = isSyncingLibrary
             )
         }
 
@@ -481,7 +483,8 @@ fun LibraryArtistsTab(
     onArtistClick: (Long) -> Unit,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
-    storageFilter: StorageFilter = StorageFilter.ALL
+    storageFilter: StorageFilter = StorageFilter.ALL,
+    isSyncingLibrary: Boolean = false
 ) {
     val listState = rememberLazyListState()
     val artistFastScrollLabelProvider = remember(artists, currentArtistSortOption) {
@@ -582,7 +585,8 @@ fun LibraryArtistsTab(
             LibraryExpressiveEmptyState(
                 tabId = LibraryTabId.ARTISTS,
                 storageFilter = storageFilter,
-                bottomBarHeight = bottomBarHeight
+                bottomBarHeight = bottomBarHeight,
+                isSyncing = isSyncingLibrary
             )
         }
 
@@ -675,7 +679,8 @@ fun LibraryPlaylistsTab(
     selectedPlaylistIds: Set<String> = emptySet(),
     onPlaylistLongPress: (com.lostf1sh.pixelplayeross.data.model.Playlist) -> Unit = {},
     onPlaylistSelectionToggle: (com.lostf1sh.pixelplayeross.data.model.Playlist) -> Unit = {},
-    onPlaylistOptionsClick: () -> Unit = {}
+    onPlaylistOptionsClick: () -> Unit = {},
+    isSyncingLibrary: Boolean = false
 ) {
     PlaylistContainer(
         playlistUiState = playlistUiState,
@@ -689,6 +694,7 @@ fun LibraryPlaylistsTab(
         isSelectionMode = isSelectionMode,
         selectedPlaylistIds = selectedPlaylistIds,
         onPlaylistLongPress = onPlaylistLongPress,
-        onPlaylistSelectionToggle = onPlaylistSelectionToggle
+        onPlaylistSelectionToggle = onPlaylistSelectionToggle,
+        isSyncingLibrary = isSyncingLibrary
     )
 }

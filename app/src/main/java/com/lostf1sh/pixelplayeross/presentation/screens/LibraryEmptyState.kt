@@ -112,9 +112,35 @@ internal fun LibraryExpressiveEmptyState(
     tabId: LibraryTabId,
     storageFilter: StorageFilter,
     bottomBarHeight: Dp,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    isSyncing: Boolean = false
 ) {
     val spec = remember(tabId, storageFilter) { libraryEmptySpec(tabId, storageFilter) }
+
+    if (isSyncing) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(bottom = bottomBarHeight + 24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally, 
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier.size(48.dp),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Syncing...",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        return
+    }
 
     Box(
         modifier = modifier

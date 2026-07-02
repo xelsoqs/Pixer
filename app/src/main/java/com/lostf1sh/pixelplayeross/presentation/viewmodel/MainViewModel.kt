@@ -68,12 +68,21 @@ class MainViewModel @Inject constructor(
     fun startSync() {
         android.util.Log.d("SyncDebug", "MainViewModel startSync() called")
         viewModelScope.launch {
+            playlistPreferencesRepository.isSyncingLibraryFlow.value = true
             android.util.Log.d("SyncDebug", "Calling playlistPreferencesRepository.syncLovedTracks()")
             playlistPreferencesRepository.syncLovedTracks()
+            
             android.util.Log.d("SyncDebug", "Calling playlistPreferencesRepository.syncLovedAlbums()")
             playlistPreferencesRepository.syncLovedAlbums()
+            
+            android.util.Log.d("SyncDebug", "Calling playlistPreferencesRepository.syncLovedArtists()")
+            playlistPreferencesRepository.syncLovedArtists()
+
+            android.util.Log.d("SyncDebug", "Calling playlistPreferencesRepository.syncUserPlaylists()")
             playlistPreferencesRepository.syncUserPlaylists()
-            android.util.Log.d("SyncDebug", "Finished playlistPreferencesRepository.syncLovedTracks() and syncLovedAlbums()")
+            
+            android.util.Log.d("SyncDebug", "Finished syncing playlists, tracks, albums, and artists")
+            playlistPreferencesRepository.isSyncingLibraryFlow.value = false
         }
     }
     fun retrySync() {

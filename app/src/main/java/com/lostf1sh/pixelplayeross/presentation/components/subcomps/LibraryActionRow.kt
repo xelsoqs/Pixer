@@ -104,10 +104,14 @@ fun LibraryActionRow(
     isShuffleEnabled: Boolean = false,
     // Storage Filter
     showStorageFilterButton: Boolean = false,
+    showMainActionButtons: Boolean = true,
     currentStorageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter = com.lostf1sh.pixelplayeross.data.model.StorageFilter.ALL,
     onStorageFilterClick: () -> Unit = {},
     // Optional Play Action
-    onPlayClick: (() -> Unit)? = null
+    onPlayClick: (() -> Unit)? = null,
+    // Custom Main Action
+    customMainActionIcon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    customMainActionText: String? = null
 ) {
     val shouldShowImport = isPlaylistTab && showImportButton
 
@@ -144,159 +148,101 @@ fun LibraryActionRow(
                 val outerCorner = 26.dp
                 val innerCorner = 8.dp
 
-                val newButtonEndCorner by animateDpAsState(
-                    targetValue = if (shouldShowImport) innerCorner else outerCorner,
-                    label = "NewButtonEndCorner"
-                )
+                val newButtonEndCorner = outerCorner
 
-                val importButtonStartCorner by animateDpAsState(
-                    targetValue = innerCorner,
-                    label = "ImportButtonStartCorner"
-                )
+                val importButtonStartCorner = innerCorner
                 val hasPlayButton = onPlayClick != null && !isPlaylistTab
-                val shuffleStartCorner = if (hasPlayButton) innerCorner else 26.dp
+                val shuffleStartCorner by animateDpAsState(
+                    targetValue = if (hasPlayButton) innerCorner else 26.dp,
+                    label = "ShuffleStartCornerAnim"
+                )
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Determine button colors based on shuffle state (not for playlist tab)
-                    val buttonContainerColor = MaterialTheme.colorScheme.tertiaryContainer
-                    val buttonContentColor = MaterialTheme.colorScheme.onTertiaryContainer
-                    
-                    if (hasPlayButton) {
+                    if (showMainActionButtons) {
+                        // Determine button colors based on shuffle state (not for playlist tab)
+                        val buttonContainerColor = MaterialTheme.colorScheme.tertiaryContainer
+                        val buttonContentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                        
+                        AnimatedVisibility(
+                            visible = hasPlayButton,
+                            enter = slideInHorizontally { -it } + fadeIn() + expandHorizontally(),
+                            exit = slideOutHorizontally { -it } + fadeOut() + shrinkHorizontally()
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                FilledTonalButton(
+                                    onClick = onPlayClick ?: {},
+                                    shape = RoundedCornerShape(
+                                        topStart = 26.dp, bottomStart = 26.dp,
+                                        topEnd = innerCorner, bottomEnd = innerCorner
+                                    ),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = buttonContainerColor,
+                                        contentColor = buttonContentColor
+                                    ),
+                                    elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp, pressedElevation = 6.dp),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                                    modifier = Modifier.height(genHeight)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.PlayArrow,
+                                        contentDescription = stringResource(R.string.cd_play),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(4.dp))
+                            }
+                        }
+
                         FilledTonalButton(
-                            onClick = onPlayClick!!,
+                            onClick = onMainActionClick,
                             shape = RoundedCornerShape(
-                                topStart = 26.dp, bottomStart = 26.dp,
-                                topEnd = innerCorner, bottomEnd = innerCorner
+                                topStart = shuffleStartCorner, bottomStart = shuffleStartCorner,
+                                topEnd =  newButtonEndCorner, bottomEnd = newButtonEndCorner
                             ),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = buttonContainerColor,
                                 contentColor = buttonContentColor
                             ),
                             elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp, pressedElevation = 6.dp),
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
                             modifier = Modifier.height(genHeight)
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.PlayArrow,
-                                contentDescription = stringResource(R.string.cd_play),
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
+                            val icon = customMainActionIcon ?: if (isPlaylistTab) Icons.AutoMirrored.Rounded.PlaylistAdd else Icons.Rounded.Shuffle
+                            val text = customMainActionText ?: if (isPlaylistTab) {
+                                stringResource(R.string.library_action_new)
+                            } else {
+                                stringResource(R.string.shortcut_shuffle_short)
+                            }
+                            val contentDesc = customMainActionText ?: if (isPlaylistTab) {
+                                stringResource(R.string.cd_create_new_playlist)
+                            } else {
+                                stringResource(R.string.cd_shuffle_play)
+                            }
 
-                    FilledTonalButton(
-                        onClick = onMainActionClick,
-                        shape = RoundedCornerShape(
-                            topStart = shuffleStartCorner, bottomStart = shuffleStartCorner,
-                            topEnd =  newButtonEndCorner, bottomEnd = newButtonEndCorner
-                        ),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = buttonContainerColor,
-                            contentColor = buttonContentColor
-                        ),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 4.dp, pressedElevation = 6.dp),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-                        modifier = Modifier.height(genHeight)
-                    ) {
-                        val icon = if (isPlaylistTab) Icons.AutoMirrored.Rounded.PlaylistAdd else Icons.Rounded.Shuffle
-                        val text = if (isPlaylistTab) {
-                            stringResource(R.string.library_action_new)
-                        } else {
-                            stringResource(R.string.shortcut_shuffle_short)
-                        }
-                        val contentDesc = if (isPlaylistTab) {
-                            stringResource(R.string.cd_create_new_playlist)
-                        } else {
-                            stringResource(R.string.cd_shuffle_play)
-                        }
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = contentDesc,
-                                modifier = Modifier.size(20.dp).rotate(iconRotation)
-                            )
-                            Text(
-                                modifier = Modifier.animateContentSize(),
-                                text = text,
-                                overflow = TextOverflow.Ellipsis,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-
-                    AnimatedVisibility(
-                        visible = shouldShowImport,
-                        enter = fadeIn() + expandHorizontally(
-                            expandFrom = Alignment.Start,
-                            clip = false, // <— avoids the 「clipping」 during the expansion
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessLow
-                            )
-                        ),
-                        exit = fadeOut() + shrinkHorizontally(
-                            shrinkTowards = Alignment.Start,
-                            clip = false, // <— avoids the 「clipping」 during the expansion
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                stiffness = Spring.StiffnessMedium
-                            )
-                        )
-                    ) {
-                        Row(modifier = Modifier.height(genHeight), verticalAlignment = Alignment.CenterVertically) {
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            FilledTonalButton(
-                                onClick = onImportM3uClick,
-                                shape = RoundedCornerShape(
-                                    topStart = importButtonStartCorner,
-                                    bottomStart = importButtonStartCorner,
-                                    topEnd = 26.dp,
-                                    bottomEnd = 26.dp
-                                ),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                                ),
-                                elevation = ButtonDefaults.buttonElevation(
-                                    defaultElevation = 4.dp,
-                                    pressedElevation = 6.dp
-                                ),
-                                contentPadding = PaddingValues(
-                                    horizontal = 14.dp,
-                                    vertical = 10.dp
-                                ),
-                                modifier = Modifier.height(genHeight)
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Icon(
-                                        painter = painterResource(R.drawable.rounded_upload_file_24),
-                                        contentDescription = stringResource(R.string.cd_import_m3u_playlist),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.import_file),
-                                        overflow = TextOverflow.Ellipsis,
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = contentDesc,
+                                    modifier = Modifier.size(20.dp).rotate(iconRotation)
+                                )
+                                Text(
+                                    modifier = Modifier.animateContentSize(),
+                                    text = text,
+                                    overflow = TextOverflow.Ellipsis,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = FontWeight.Medium
+                                )
                             }
                         }
+
+                        // Import button removed per user request
                     }
-                }
             }
         }
-
+        }
 
         Spacer(modifier = Modifier.width(8.dp))
 

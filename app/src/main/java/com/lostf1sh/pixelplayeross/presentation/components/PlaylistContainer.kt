@@ -110,18 +110,28 @@ fun PlaylistContainer(
     selectedPlaylistIds: Set<String> = emptySet(),
     onPlaylistLongPress: (Playlist) -> Unit = {},
     onPlaylistSelectionToggle: (Playlist) -> Unit = {},
-    playlistSelectionStateHolder: PlaylistSelectionStateHolder? = null
+    playlistSelectionStateHolder: PlaylistSelectionStateHolder? = null,
+    isSyncingLibrary: Boolean = false
 ) {
 
     Column(modifier = Modifier.fillMaxSize()) {
-        if (playlistUiState.isLoading && filteredPlaylists.isEmpty()) {
+        if ((playlistUiState.isLoading || isSyncingLibrary) && filteredPlaylists.isEmpty()) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
-            ) { CircularProgressIndicator() }
+            ) { 
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        text = "Syncing...",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
 
-        if (filteredPlaylists.isEmpty() && !playlistUiState.isLoading) {
+        if (filteredPlaylists.isEmpty() && !playlistUiState.isLoading && !isSyncingLibrary) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()

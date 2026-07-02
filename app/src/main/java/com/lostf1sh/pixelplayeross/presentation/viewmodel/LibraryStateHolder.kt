@@ -7,6 +7,8 @@ import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import androidx.compose.ui.graphics.toArgb
+import androidx.paging.PagingData
+import androidx.paging.filter
 import com.lostf1sh.pixelplayeross.data.model.Album
 import com.lostf1sh.pixelplayeross.data.model.Artist
 import com.lostf1sh.pixelplayeross.data.model.LibraryTabId
@@ -141,6 +143,7 @@ class LibraryStateHolder @Inject constructor(
             sort to filter
         }.flatMapLatest { (sortOption, filter) ->
             musicRepository.getPaginatedArtists(sortOption, filter)
+                .map { pagingData -> pagingData.filter { it.name.lowercase() != "<unknown>" } }
         }
         .flowOn(Dispatchers.IO)
 
@@ -292,7 +295,8 @@ class LibraryStateHolder @Inject constructor(
                 musicRepository.getArtists(filter)
             }.conflate().collect { artists ->
                 val sortedArtists = withContext(Dispatchers.Default) {
-                    sortArtistsList(artists, _currentArtistSortOption.value).toImmutableList()
+                    val filteredArtists = artists.filter { it.name.trim() != "<unknown>" }
+                    sortArtistsList(filteredArtists, _currentArtistSortOption.value).toImmutableList()
                 }
                 _artists.value = sortedArtists
                 _isLoadingCategories.value = false

@@ -64,7 +64,7 @@ class AlbumDetailViewModel @Inject constructor(
             
             // Try fetching from Deezer first if we have network, or if it's a known Deezer ID
             val deezerAlbum = deezerRepository.getAlbumInfo(id)
-            timber.log.Timber.tag("AlbumDebug").d("loadAlbumData($id) deezerAlbum result: ${deezerAlbum?.data?.attributes?.name}")
+
             if (deezerAlbum?.data != null) {
                 val data = deezerAlbum.data
                 val coverXl = data.attributes?.image?.coverXl() ?: data.attributes?.image?.large ?: data.attributes?.image?.medium
@@ -98,7 +98,8 @@ class AlbumDetailViewModel @Inject constructor(
                         year = album.year,
                         mimeType = null,
                         bitrate = null,
-                        sampleRate = null
+                        sampleRate = null,
+                        isExplicit = track.attributes?.explicit ?: false
                     )
                 } ?: emptyList()
                 

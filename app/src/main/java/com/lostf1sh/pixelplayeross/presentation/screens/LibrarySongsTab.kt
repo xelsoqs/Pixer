@@ -78,7 +78,8 @@ fun LibrarySongsTab(
     onLocateCurrentSongVisibilityChanged: (Boolean) -> Unit = {},
     onRegisterLocateCurrentSongAction: ((() -> Unit)?) -> Unit = {},
     storageFilter: StorageFilter = StorageFilter.ALL,
-    hasCurrentSong: Boolean = false
+    hasCurrentSong: Boolean = false,
+    isSyncingLibrary: Boolean = false
 ) {
     val listState = rememberLazyListState()
     val pullToRefreshState = rememberPullToRefreshState()
@@ -280,7 +281,8 @@ fun LibrarySongsTab(
             LibraryExpressiveEmptyState(
                 tabId = LibraryTabId.PODCASTS,
                 storageFilter = storageFilter,
-                bottomBarHeight = bottomBarHeight
+                bottomBarHeight = bottomBarHeight,
+                isSyncing = isSyncingLibrary
             )
         }
         else -> {

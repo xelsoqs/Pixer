@@ -237,11 +237,11 @@ class DeezerRepository @Inject constructor(
 
     suspend fun getAlbumInfo(albumId: Long): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerAlbumMetadataResponse? {
         val auth = getAuthHeader()
-        timber.log.Timber.tag("AlbumDebug").d("DeezerRepository.getAlbumInfo($albumId), auth is null? ${auth == null}")
+
         if (auth == null) return null
         return try {
             val response = deezerApiService.getAlbumInfo(albumId, auth)
-            timber.log.Timber.tag("AlbumDebug").d("DeezerRepository.getAlbumInfo response: $response")
+
             response
         } catch (e: Exception) {
             timber.log.Timber.e(e, "Exception fetching album info for albumId=$albumId")
@@ -278,6 +278,81 @@ class DeezerRepository @Inject constructor(
             deezerApiService.getGcastLovedAlbums(userId, auth, start, limit)
         } catch (e: Exception) {
             timber.log.Timber.e(e, "Exception fetching loved albums")
+            null
+        }
+    }
+
+    // --- Artist Methods ---
+
+    suspend fun getArtistInfo(artistId: Long): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerArtist? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            deezerApiService.getArtistInfo(artistId, auth)
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception fetching artist info for artistId=$artistId")
+            null
+        }
+    }
+
+    suspend fun getArtistAlbums(artistId: Long): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerLovedAlbumsResponse? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            deezerApiService.getArtistAlbums(artistId, auth)
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception fetching artist albums for artistId=$artistId")
+            null
+        }
+    }
+
+    suspend fun getSimilarArtists(artistId: Long): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerArtistsListResponse? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            deezerApiService.getSimilarArtists(artistId, auth)
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception fetching similar artists for artistId=$artistId")
+            null
+        }
+    }
+
+    suspend fun getArtistTopTracks(artistId: Long): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerPlaylistDetailResponse? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            deezerApiService.getArtistTopTracks(artistId, auth)
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception fetching artist top tracks for artistId=$artistId")
+            null
+        }
+    }
+
+    suspend fun likeArtist(artistId: Long): Boolean {
+        val auth = getAuthHeader() ?: return false
+        return try {
+            val response = deezerApiService.likeArtist(artistId, auth)
+            response.isSuccessful
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception liking artist")
+            false
+        }
+    }
+
+    suspend fun unlikeArtist(artistId: Long): Boolean {
+        val auth = getAuthHeader() ?: return false
+        return try {
+            val response = deezerApiService.unlikeArtist(artistId, auth)
+            response.isSuccessful
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception unliking artist")
+            false
+        }
+    }
+
+    suspend fun getGcastLovedArtists(): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerArtistsListResponse? {
+        val auth = getAuthHeader() ?: return null
+        val userId = getUserId() ?: return null
+        return try {
+            deezerApiService.getGcastLovedArtists(userId, auth)
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception fetching loved artists")
             null
         }
     }

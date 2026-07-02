@@ -3,6 +3,7 @@ package com.lostf1sh.pixelplayeross.data.repository
 import androidx.paging.PagingData
 import com.lostf1sh.pixelplayeross.data.model.Song
 import com.lostf1sh.pixelplayeross.data.model.Album
+import com.lostf1sh.pixelplayeross.data.model.Artist
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 
@@ -12,6 +13,12 @@ interface SongRepository {
     fun getSongsByArtist(artistId: Long): Flow<List<Song>>
     suspend fun searchSongs(query: String): List<Song>
     fun getSongById(songId: Long): Flow<Song?>
+    fun getArtistById(artistId: Long): Flow<Artist?>
+    suspend fun getArtistIdByName(name: String): Long?
+    fun getPaginatedArtists(
+        sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption,
+        storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter
+    ): Flow<PagingData<Artist>>
     fun getPaginatedSongs(sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter): Flow<PagingData<Song>>
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getPaginatedSongs(): Flow<PagingData<Song>>

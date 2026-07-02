@@ -248,6 +248,7 @@ class PlayerViewModel @Inject constructor(
     private val deezerRepository: com.lostf1sh.pixelplayeross.data.repository.DeezerRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
     private val themePreferencesRepository: ThemePreferencesRepository,
+    private val playlistPreferencesRepository: com.lostf1sh.pixelplayeross.data.preferences.PlaylistPreferencesRepository,
 
     private val dualPlayerEngine: DualPlayerEngine,
     private val appShortcutManager: AppShortcutManager,
@@ -1163,7 +1164,7 @@ class PlayerViewModel @Inject constructor(
             initialValue = SortOption.PLAYLISTS
         )
 
-    val isSyncingStateFlow: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()
+    val isSyncingStateFlow: StateFlow<Boolean> = playlistPreferencesRepository.isSyncingLibraryFlow.asStateFlow()
 
     private val _isInitialDataLoaded = MutableStateFlow(false)
 
@@ -1552,7 +1553,7 @@ class PlayerViewModel @Inject constructor(
 
     fun shuffleRandomAlbum() {
         viewModelScope.launch {
-            val allAlbums = libraryStateHolder.albums.value
+            val allAlbums = musicRepository.getAlbums().first()
             if (allAlbums.isNotEmpty()) {
                 val randomAlbum = allAlbums.random()
                 val albumSongs = musicRepository.getSongsForAlbum(randomAlbum.id).first()
@@ -1565,12 +1566,25 @@ class PlayerViewModel @Inject constructor(
 
     fun shuffleRandomArtist() {
         viewModelScope.launch {
-            val allArtists = libraryStateHolder.artists.value
+            val allArtists = musicRepository.getArtists().first()
             if (allArtists.isNotEmpty()) {
                 val randomArtist = allArtists.random()
                 val artistSongs = musicRepository.getSongsForArtist(randomArtist.id).first()
                 if (artistSongs.isNotEmpty()) {
                     playSongsShuffled(artistSongs, randomArtist.name, startAtZero = true)
+                }
+            }
+        }
+    }
+
+    fun shuffleRandomPlaylist() {
+        viewModelScope.launch {
+            val allPlaylists = playlistPreferencesRepository.userPlaylistsFlow.first()
+            if (allPlaylists.isNotEmpty()) {
+                val randomPlaylist = allPlaylists.random()
+                val playlistSongs = musicRepository.getSongsByIds(randomPlaylist.songIds).first()
+                if (playlistSongs.isNotEmpty()) {
+                    playSongsShuffled(playlistSongs, randomPlaylist.name, startAtZero = true)
                 }
             }
         }
@@ -2309,16 +2323,13 @@ class PlayerViewModel @Inject constructor(
     fun triggerAlbumNavigationFromPlayer(albumId: Long) {
         val existingJob = albumNavigationJob
         if (existingJob != null && existingJob.isActive) {
-            Timber.tag("AlbumDebug").d("triggerAlbumNavigationFromPlayer ignored; navigation already in progress for albumId=$albumId")
+
             return
         }
 
         albumNavigationJob?.cancel()
         albumNavigationJob = viewModelScope.launch {
             val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
-            Timber.tag("AlbumDebug").d(
-                "triggerAlbumNavigationFromPlayer: albumId=$albumId, songId=${currentSong?.id}, title=${currentSong?.title}"
-            )
 
             var resolvedAlbumId = albumId
             // If albumId is 0 or -1, try to fetch the real album ID from track metadata
@@ -2326,11 +2337,11 @@ class PlayerViewModel @Inject constructor(
                 val isDeezer = currentSong.id.startsWith("deezer_") || currentSong.contentUriString.startsWith("deezer://track/")
                 if (isDeezer) {
                     val rawId = if (currentSong.id.startsWith("deezer_")) currentSong.id.removePrefix("deezer_") else currentSong.contentUriString.removePrefix("deezer://track/")
-                    Timber.tag("AlbumDebug").d("albumId is 0, fetching from getTrackInfo for rawId=$rawId")
+
                     try {
                         val trackInfo = deezerRepository.getTrackInfo(rawId)
                         val fetchedAlbumId = trackInfo?.album?.id ?: 0L
-                        Timber.tag("AlbumDebug").d("getTrackInfo returned album.id=$fetchedAlbumId")
+
                         if (fetchedAlbumId != 0L) {
                             resolvedAlbumId = fetchedAlbumId
                             // Also update the song's albumId in DB and state for next time
@@ -2346,13 +2357,13 @@ class PlayerViewModel @Inject constructor(
                             }
                         }
                     } catch (e: Exception) {
-                        Timber.tag("AlbumDebug").e(e, "Failed to fetch albumId from track info")
+
                     }
                 }
             }
 
             if (resolvedAlbumId <= 0L) {
-                Timber.tag("AlbumDebug").d("triggerAlbumNavigationFromPlayer: could not resolve albumId, aborting")
+
                 return@launch
             }
 
@@ -2368,10 +2379,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun triggerArtistNavigationFromPlayer(artistId: Long) {
-        if (artistId == 0L) {
-            Timber.tag("ArtistDebug").d("triggerArtistNavigationFromPlayer ignored invalid artistId=$artistId")
-            return
-        }
 
         val existingJob = artistNavigationJob
         if (existingJob != null && existingJob.isActive) {
@@ -2384,14 +2391,27 @@ class PlayerViewModel @Inject constructor(
             var resolvedId = artistId
             val currentSong = playbackStateHolder.stablePlayerState.value.currentSong
             
-            if (resolvedId == -1L && currentSong != null) {
-                val idFromName = musicRepository.getArtistIdByName(currentSong.artist)
-                if (idFromName != null) {
-                    resolvedId = idFromName
+            if (resolvedId <= 0L && currentSong != null) {
+                val isDeezer = currentSong.id.startsWith("deezer_") || currentSong.contentUriString.startsWith("deezer://track/")
+                if (isDeezer) {
+                    val rawId = if (currentSong.id.startsWith("deezer_")) currentSong.id.removePrefix("deezer_") else currentSong.contentUriString.removePrefix("deezer://track/")
+                    try {
+                        val trackInfo = deezerRepository.getTrackInfo(rawId)
+                        val fetchedArtistId = trackInfo?.contributors?.firstOrNull()?.id ?: 0L
+                        if (fetchedArtistId != 0L) {
+                            resolvedId = fetchedArtistId
+                        }
+                    } catch (e: Exception) {
+                    }
+                } else {
+                    val idFromName = musicRepository.getArtistIdByName(currentSong.artist)
+                    if (idFromName != null) {
+                        resolvedId = idFromName
+                    }
                 }
             }
 
-            if (resolvedId == 0L || resolvedId == -1L) {
+            if (resolvedId <= 0L) {
                 Timber.tag("ArtistDebug").d("triggerArtistNavigationFromPlayer: could not resolve artistId for name=${currentSong?.artist}")
                 return@launch
             }

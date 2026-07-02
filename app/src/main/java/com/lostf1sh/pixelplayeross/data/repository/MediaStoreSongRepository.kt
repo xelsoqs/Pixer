@@ -38,6 +38,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.withContext
 import com.lostf1sh.pixelplayeross.data.database.toAlbum
+import com.lostf1sh.pixelplayeross.data.database.toArtist
+import com.lostf1sh.pixelplayeross.data.model.Artist
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -362,12 +364,15 @@ class MediaStoreSongRepository @Inject constructor(
     }
 
     override fun getSongById(songId: Long): Flow<Song?> {
-        return observeSongs(
-            extraSelection = "${MediaStore.Audio.Media._ID} = ?",
-            extraSelectionArgs = arrayOf(songId.toString())
-        ).map { songs ->
-            songs.firstOrNull()
-        }.distinctUntilChanged()
+        return musicDao.getSongById(songId).map { it?.toSong() }
+    }
+
+    override fun getArtistById(artistId: Long): Flow<Artist?> {
+        return musicDao.getArtistById(artistId).map { it?.toArtist() }
+    }
+
+    override suspend fun getArtistIdByName(name: String): Long? {
+        return musicDao.getArtistIdByName(name)
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
@@ -490,6 +495,39 @@ class MediaStoreSongRepository @Inject constructor(
             }.flatMapLatest { it }
         }.map { pagingData ->
             pagingData.map { entity -> entity.toSong() }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun getPaginatedArtists(
+        sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption,
+        storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter
+    ): Flow<PagingData<Artist>> {
+        return combine(
+            userPreferencesRepository.allowedDirectoriesFlow,
+            userPreferencesRepository.blockedDirectoriesFlow
+        ) { allowedDirs, blockedDirs ->
+            allowedDirs to blockedDirs
+        }.flatMapLatest { (allowedDirs, blockedDirs) ->
+            kotlinx.coroutines.flow.flow {
+                val (allowedParentDirs, applyDirectoryFilter) =
+                    computeAllowedDirs(allowedDirs, blockedDirs)
+                emit(
+                    androidx.paging.Pager(
+                        config = defaultPagingConfig,
+                        pagingSourceFactory = {
+                            musicDao.getArtistsPaginated(
+                                allowedParentDirs = allowedParentDirs,
+                                applyDirectoryFilter = applyDirectoryFilter,
+                                sortOrder = sortOption.storageKey,
+                                filterMode = storageFilter.value
+                            )
+                        }
+                    ).flow
+                )
+            }.flatMapLatest { it }
+        }.map { pagingData ->
+            pagingData.map { entity -> entity.toArtist() }
         }
     }
 

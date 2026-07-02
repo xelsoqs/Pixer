@@ -159,4 +159,50 @@ interface DeezerApiService {
         @retrofit2.http.Query("start") start: Int = 0,
         @retrofit2.http.Query("limit") limit: Int = 50
     ): DeezerLovedAlbumsResponse
+
+    // --- Artist Endpoints ---
+
+    @GET("artist/{artist_id}")
+    suspend fun getArtistInfo(
+        @retrofit2.http.Path("artist_id") artistId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerArtist
+
+    @GET("platform/generic/artist/{artist_id}/albums")
+    suspend fun getArtistAlbums(
+        @retrofit2.http.Path("artist_id") artistId: Long,
+        @retrofit2.http.Header("authorization") auth: String,
+        @retrofit2.http.Query("include") include: String = "lyrics"
+    ): DeezerLovedAlbumsResponse
+
+    @GET("platform/generic/artist/{artist_id}/similar-artists")
+    suspend fun getSimilarArtists(
+        @retrofit2.http.Path("artist_id") artistId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerArtistsListResponse
+
+    @GET("platform/generic/artist/{artist_id}/top-tracks")
+    suspend fun getArtistTopTracks(
+        @retrofit2.http.Path("artist_id") artistId: Long,
+        @retrofit2.http.Header("authorization") auth: String,
+        @retrofit2.http.Query("include") include: String = "lyrics"
+    ): DeezerPlaylistDetailResponse
+
+    @retrofit2.http.POST("platform/generic/artist/{artist_id}/like")
+    suspend fun likeArtist(
+        @retrofit2.http.Path("artist_id") artistId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): retrofit2.Response<Unit>
+
+    @retrofit2.http.DELETE("platform/generic/artist/{artist_id}/like")
+    suspend fun unlikeArtist(
+        @retrofit2.http.Path("artist_id") artistId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): retrofit2.Response<Unit>
+
+    @GET("platform/gcast/user/{user_id}/loved-artists")
+    suspend fun getGcastLovedArtists(
+        @retrofit2.http.Path("user_id") userId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerArtistsListResponse
 }

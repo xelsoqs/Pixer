@@ -261,6 +261,8 @@ object MediaItemBuilder {
         }
     }
 
+    const val EXTERNAL_EXTRA_IS_EXPLICIT = "${EXTERNAL_EXTRA_PREFIX}is_explicit"
+    
     @OptIn(UnstableApi::class)
     private fun buildMediaMetadataForSong(
         song: Song,
@@ -292,6 +294,7 @@ object MediaItemBuilder {
             putInt(EXTERNAL_EXTRA_SAMPLE_RATE, song.sampleRate ?: 0)
             putString(EXTERNAL_EXTRA_FILE_PATH, song.path)
             song.navidromeId?.let { putString(EXTERNAL_EXTRA_NAVIDROME_ID, it) }
+            putBoolean(EXTERNAL_EXTRA_IS_EXPLICIT, song.isExplicit)
         }
 
         metadataBuilder.setExtras(extras)

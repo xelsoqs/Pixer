@@ -52,3 +52,10 @@ val MIGRATION_1_2 = object : Migration(1, 2) {
         db.execSQL("CREATE INDEX IF NOT EXISTS `index_songs_album_artist_id` ON `songs` (`album_artist_id`)")
     }
 }
+
+val MIGRATION_3_4 = object : Migration(3, 4) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE artists ADD COLUMN fan_count INTEGER NOT NULL DEFAULT 0")
+        db.execSQL("ALTER TABLE artists ADD COLUMN album_count INTEGER NOT NULL DEFAULT 0")
+    }
+}

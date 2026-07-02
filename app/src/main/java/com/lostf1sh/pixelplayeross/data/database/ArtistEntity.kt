@@ -16,7 +16,9 @@ data class ArtistEntity(
     @ColumnInfo(name = "name") val name: String,
     @ColumnInfo(name = "track_count") val trackCount: Int,
     @ColumnInfo(name = "image_url") val imageUrl: String? = null,
-    @ColumnInfo(name = "custom_image_uri") val customImageUri: String? = null
+    @ColumnInfo(name = "custom_image_uri") val customImageUri: String? = null,
+    @ColumnInfo(name = "fan_count") val fanCount: Int = 0,
+    @ColumnInfo(name = "album_count") val albumCount: Int = 0
 )
 
 fun ArtistEntity.toArtist(): Artist {
@@ -25,7 +27,9 @@ fun ArtistEntity.toArtist(): Artist {
         name = this.name.normalizeMetadataTextOrEmpty(),
         songCount = this.trackCount, // The Artist model uses songCount, MediaStore uses NUMBER_OF_TRACKS
         imageUrl = this.imageUrl,
-        customImageUri = this.customImageUri
+        customImageUri = this.customImageUri,
+        fanCount = this.fanCount,
+        albumCount = this.albumCount
     )
 }
 

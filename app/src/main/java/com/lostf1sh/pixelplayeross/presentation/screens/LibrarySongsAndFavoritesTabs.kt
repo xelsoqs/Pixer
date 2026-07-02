@@ -86,7 +86,8 @@ fun LibraryFavoritesTab(
     onLocateCurrentSongVisibilityChanged: (Boolean) -> Unit = {},
     onRegisterLocateCurrentSongAction: ((() -> Unit)?) -> Unit = {},
     storageFilter: StorageFilter = StorageFilter.ALL,
-    hasCurrentSong: Boolean = false
+    hasCurrentSong: Boolean = false,
+    isSyncingLibrary: Boolean = false
 ) {
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
@@ -199,7 +200,8 @@ fun LibraryFavoritesTab(
         LibraryExpressiveEmptyState(
             tabId = LibraryTabId.LIKED,
             storageFilter = storageFilter,
-            bottomBarHeight = bottomBarHeight
+            bottomBarHeight = bottomBarHeight,
+            isSyncing = isSyncingLibrary
         )
     } else {
         Box(

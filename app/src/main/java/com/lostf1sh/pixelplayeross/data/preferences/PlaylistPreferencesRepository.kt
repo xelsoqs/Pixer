@@ -32,6 +32,8 @@ class PlaylistPreferencesRepository @Inject constructor(
     val playlistSongOrderModesFlow: Flow<Map<String, String>> = userPreferencesRepository.playlistSongOrderModesFlow
     val playlistsSortOptionFlow: Flow<String> = userPreferencesRepository.playlistsSortOptionFlow
 
+    val isSyncingLibraryFlow = kotlinx.coroutines.flow.MutableStateFlow(false)
+
     suspend fun syncUserPlaylists() {
         try {
             val response = deezerRepository.getUserPlaylists()
@@ -107,6 +109,7 @@ class PlaylistPreferencesRepository @Inject constructor(
                         filePath = "",
                         parentDirectoryPath = "",
                         sourceType = com.lostf1sh.pixelplayeross.data.database.SourceType.DEEZER,
+                        isExplicit = track.attributes?.explicit ?: false
                     )
                     allLovedSongs.add(song)
                     allFavorites.add(FavoritesEntity(songId = songId, isFavorite = true, timestamp = System.currentTimeMillis() - (allFavorites.size * 1000L)))
@@ -201,9 +204,9 @@ class PlaylistPreferencesRepository @Inject constructor(
                         trackCount = 0
                     )
                 }.distinctBy { it.id }
-                musicDao.insertArtistsIgnoreConflicts(artistsToInsert)
+                musicDao.insertArtists(artistsToInsert)
                 
-                musicDao.insertAlbumsIgnoreConflicts(allLovedAlbums)
+                musicDao.insertAlbums(allLovedAlbums)
                 
                 // Remove albums that are no longer loved (and have no local songs)
                 val lovedAlbumIds = allLovedAlbums.map { it.id }
@@ -216,6 +219,42 @@ class PlaylistPreferencesRepository @Inject constructor(
             }
         } catch (e: Exception) {
             android.util.Log.e("SyncDebug", "syncLovedAlbums() error: ${e.message}", e)
+            e.printStackTrace()
+        }
+    }
+
+    suspend fun syncLovedArtists() {
+        try {
+            val response = deezerRepository.getGcastLovedArtists()
+            if (response != null && response.data != null && response.data.included != null) {
+                val lovedArtists = response.data.included.mapNotNull { item ->
+                    item.attributes?.let { attr ->
+                        com.lostf1sh.pixelplayeross.data.database.ArtistEntity(
+                            id = attr.id,
+                            name = attr.name ?: "Unknown Artist",
+                            trackCount = 0,
+                            imageUrl = attr.pictures?.medium,
+                            fanCount = attr.nbFans
+                        )
+                    }
+                }
+
+                if (lovedArtists.isNotEmpty()) {
+                    android.util.Log.d("SyncDebug", "syncLovedArtists() inserting ${lovedArtists.size} into database...")
+                    musicDao.insertArtists(lovedArtists)
+                    
+                    // Remove artists that are no longer loved (and have no local songs)
+                    val lovedArtistIds = lovedArtists.map { it.id }
+                    musicDao.deleteUnlovedArtists(lovedArtistIds)
+                    
+                    android.util.Log.d("SyncDebug", "syncLovedArtists() inserted successfully.")
+                } else {
+                    // If the user unliked all their artists, we need to clear them all out
+                    musicDao.deleteUnlovedArtists(emptyList())
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SyncDebug", "syncLovedArtists() error: ${e.message}", e)
             e.printStackTrace()
         }
     }

@@ -13,11 +13,13 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +27,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.rounded.Album
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.AddAPhoto
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Edit
@@ -102,6 +106,19 @@ import com.lostf1sh.pixelplayeross.R
 
 private const val UseSharedCollapsibleTopBarProbe = true
 
+private fun formatArtistStats(fans: Int, albums: Int): String {
+    val fansStr = when {
+        fans >= 1_000_000 -> String.format(java.util.Locale.getDefault(), "%.1fM fans", fans / 1_000_000f)
+        fans >= 1_000 -> String.format(java.util.Locale.getDefault(), "%.1fK fans", fans / 1_000f)
+        else -> "$fans fans"
+    }
+    return if (albums > 0) {
+        "$fansStr • $albums albums"
+    } else {
+        fansStr
+    }
+}
+
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -145,12 +162,6 @@ fun ArtistDetailScreen(
             ?: baseColorScheme
     }
 
-    // --- Image picker for custom artist image ---
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri ->
-        uri?.let { viewModel.setCustomImage(it) }
-    }
 
     LaunchedEffect(Unit) {
         playerViewModel.collapsePlayerSheet()
@@ -247,8 +258,9 @@ fun ArtistDetailScreen(
         Box(modifier = Modifier.nestedScroll(nestedScrollConnection)) {
             when {
                 uiState.isLoading && uiState.artist == null -> {
+                    // This covers initial load when artist is completely null
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        ContainedLoadingIndicator()
+                        androidx.compose.material3.CircularProgressIndicator()
                     }
                 }
                 uiState.error != null && uiState.artist == null -> {
@@ -296,6 +308,8 @@ fun ArtistDetailScreen(
                                 (lazyListState.canScrollForward || lazyListState.canScrollBackward)
                         }
                     }
+
+                    var isTopTracksExpanded by remember { mutableStateOf(false) }
 
                     LazyColumn(
                         state = lazyListState,
@@ -389,13 +403,169 @@ fun ArtistDetailScreen(
                             ) {
                                 Spacer(
                                     modifier = Modifier.height(
-                                        if (index == albumSections.lastIndex) 24.dp else 16.dp
+                                        if (index == albumSections.lastIndex && uiState.topTracks.isEmpty() && uiState.deezerAlbums.isEmpty() && uiState.similarArtists.isEmpty()) 24.dp else 16.dp
                                     )
                                 )
                             }
                         }
 
+                        // Top Tracks Section
+                        if (uiState.topTracks.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "Top Tracks",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                                )
+                            }
+                            
+                            item {
+                                val visibleTopTracks = if (isTopTracksExpanded) uiState.topTracks else uiState.topTracks.take(4)
+                                
+                                androidx.compose.foundation.layout.Column(modifier = Modifier.fillMaxWidth().animateContentSize()) {
+                                    visibleTopTracks.forEachIndexed { index, song ->
+                                        EnhancedSongListItem(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            song = song,
+                                            isCurrentSong = stablePlayerState.currentSong?.id == song.id,
+                                            isPlaying = stablePlayerState.isPlaying,
+                                            showAlbumArt = true,
+                                            onMoreOptionsClick = {
+                                                playerViewModel.selectSongForInfo(song)
+                                                showSongInfoBottomSheet = true
+                                            },
+                                            onClick = {
+                                                playerViewModel.showAndPlaySong(song, uiState.topTracks)
+                                            }
+                                        )
+                                    }
+                                    
+                                    if (uiState.topTracks.size > 4) {
+                                        TextButton(
+                                            onClick = { isTopTracksExpanded = !isTopTracksExpanded },
+                                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                                        ) {
+                                            Text(if (isTopTracksExpanded) "Show Less" else "Show More")
+                                        }
+                                    }
+                                }
+                            }
+                        }
 
+                        // Deezer Albums Section
+                        if (uiState.deezerAlbums.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "Albums",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
+                                )
+                            }
+                            item {
+                                androidx.compose.foundation.lazy.LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(uiState.deezerAlbums, key = { "deezer_album_${it.id}" }) { album ->
+                                        Column(
+                                            modifier = Modifier
+                                                .width(140.dp)
+                                                .clickable {
+                                                    navController.navigateSafely(Screen.AlbumDetail.createRoute(album.id))
+                                                }
+                                        ) {
+                                            SmartImage(
+                                                model = album.albumArtUriString,
+                                                contentDescription = album.title,
+                                                modifier = Modifier
+                                                    .size(140.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = album.title,
+                                                style = MaterialTheme.typography.titleMedium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = "${album.year} • ${album.songCount} tracks",
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Similar Artists Section
+                        if (uiState.similarArtists.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "Similar Artists",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(top = 24.dp, bottom = 8.dp)
+                                )
+                            }
+                            item {
+                                androidx.compose.foundation.lazy.LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    items(uiState.similarArtists, key = { "similar_artist_${it.id}" }) { similarArtist ->
+                                        Column(
+                                            modifier = Modifier
+                                                .width(100.dp)
+                                                .clickable {
+                                                    navController.navigate(Screen.ArtistDetail.createRoute(similarArtist.id))
+                                                },
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            SmartImage(
+                                                model = similarArtist.imageUrl,
+                                                contentDescription = similarArtist.name,
+                                                modifier = Modifier
+                                                    .size(100.dp)
+                                                    .clip(androidx.compose.foundation.shape.CircleShape),
+                                                targetSize = coil.size.Size.ORIGINAL
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = similarArtist.name,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Fans / About Section
+                        if (uiState.fans > 0) {
+                            item {
+                                Spacer(modifier = Modifier.height(32.dp))
+                                Text(
+                                    text = "About",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(bottom = 8.dp)
+                                )
+                                Text(
+                                    text = "%,d Fans on Deezer".format(uiState.fans),
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(24.dp))
+                            }
+                        }
                     }
 
                     if (collapseFraction > 0.95f) {
@@ -414,11 +584,13 @@ fun ArtistDetailScreen(
                         SharedArtistTopBarProbe(
                             artist = artist,
                             effectiveImageUrl = uiState.effectiveImageUrl,
-                            songsCount = songs.size,
+                            fans = uiState.fans,
+                            albumsCount = uiState.albumsCount,
                             collapseFraction = collapseFraction,
                             headerHeight = currentTopBarHeightDp,
                             headerImageRequestSize = headerImageRequestSize,
-                            hasCustomImage = !artist.customImageUri.isNullOrBlank(),
+                            isLiked = uiState.isLiked,
+                            onLikeClick = { viewModel.toggleArtistLike() },
                             onBackPressed = { navController.popBackStack() },
                             onPlayClick = {
                                 if (songs.isNotEmpty()) {
@@ -427,20 +599,26 @@ fun ArtistDetailScreen(
                                         artist.name,
                                         startAtZero = true
                                     )
+                                } else if (uiState.topTracks.isNotEmpty()) {
+                                    playerViewModel.playSongsShuffled(
+                                        uiState.topTracks,
+                                        artist.name,
+                                        startAtZero = true
+                                    )
                                 }
-                            },
-                            onChangeImage = { imagePickerLauncher.launch("image/*") },
-                            onClearCustomImage = { viewModel.clearCustomImage() }
+                            }
                         )
                     } else {
                         CustomCollapsingTopBar(
                             artist = artist,
                             effectiveImageUrl = uiState.effectiveImageUrl,
-                            hasCustomImage = !artist.customImageUri.isNullOrBlank(),
-                            songsCount = songs.size,
+                            fansCount = uiState.fans,
+                            albumsCount = uiState.albumsCount,
                             collapseFraction = collapseFraction,
                             headerHeight = currentTopBarHeightDp,
                             headerImageRequestSize = headerImageRequestSize,
+                            isLiked = uiState.isLiked,
+                            onLikeClick = { viewModel.toggleArtistLike() },
                             onBackPressed = { navController.popBackStack() },
                             onPlayClick = {
                                 if (songs.isNotEmpty()) {
@@ -449,11 +627,25 @@ fun ArtistDetailScreen(
                                         artist.name,
                                         startAtZero = true
                                     )
+                                } else if (uiState.topTracks.isNotEmpty()) {
+                                    playerViewModel.playSongsShuffled(
+                                        uiState.topTracks,
+                                        artist.name,
+                                        startAtZero = true
+                                    )
                                 }
-                            },
-                            onChangeImage = { imagePickerLauncher.launch("image/*") },
-                            onClearCustomImage = { viewModel.clearCustomImage() }
+                            }
                         )
+                    }
+                    if (uiState.isLoading) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = maxTopBarHeight),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            androidx.compose.material3.CircularProgressIndicator()
+                        }
                     }
                 }
             }
@@ -737,17 +929,16 @@ private fun ArtistAlbumSectionSongItem(
 private fun SharedArtistTopBarProbe(
     artist: Artist,
     effectiveImageUrl: String?,
-    songsCount: Int,
+    fans: Int,
+    albumsCount: Int,
     collapseFraction: Float,
     headerHeight: Dp,
     headerImageRequestSize: Size,
-    hasCustomImage: Boolean,
+    isLiked: Boolean,
+    onLikeClick: () -> Unit,
     onBackPressed: () -> Unit,
-    onPlayClick: () -> Unit,
-    onChangeImage: () -> Unit,
-    onClearCustomImage: () -> Unit
+    onPlayClick: () -> Unit
 ) {
-    var showImageMenu by remember { mutableStateOf(false) }
     val surfaceColor = MaterialTheme.colorScheme.surface
     val statusBarColor =
         if (LocalPixelPlayerDarkTheme.current) Color.Black.copy(alpha = 0.6f)
@@ -822,7 +1013,7 @@ private fun SharedArtistTopBarProbe(
 
         CollapsibleCommonTopBar(
             title = artist.name,
-            subtitle = formatSongCount(songsCount),
+            subtitle = formatArtistStats(fans, albumsCount),
             collapseFraction = collapseFraction,
             headerHeight = headerHeight,
             onBackClick = onBackPressed,
@@ -847,47 +1038,18 @@ private fun SharedArtistTopBarProbe(
             fadeSubtitleOnCollapse = false,
             syncStatusBarWithContainer = false,
             actions = {
-                Box(
+                Row(
                     modifier = Modifier.padding(end = 12.dp, top = 4.dp)
                 ) {
                     FilledIconButton(
-                        onClick = { showImageMenu = true },
+                        onClick = onLikeClick,
                         colors = IconButtonDefaults.filledIconButtonColors(
                             containerColor = MaterialTheme.colorScheme.surfaceContainerLow
                         )
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Edit,
-                            contentDescription = stringResource(R.string.presentation_batch_d_edit_artist_image_cd)
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = showImageMenu,
-                        onDismissRequest = { showImageMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.presentation_batch_d_change_photo)) },
-                            leadingIcon = {
-                                Icon(Icons.Rounded.AddAPhoto, contentDescription = null)
-                            },
-                            onClick = {
-                                showImageMenu = false
-                                onChangeImage()
-                            }
-                        )
-                        if (hasCustomImage) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.presentation_batch_d_reset_to_default)) },
-                                leadingIcon = {
-                                    Icon(Icons.Rounded.Delete, contentDescription = null)
-                                },
-                                onClick = {
-                                    showImageMenu = false
-                                    onClearCustomImage()
-                                }
-                            )
-                        }
+                        val icon = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder
+                        val tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        Icon(icon, contentDescription = null, tint = tint)
                     }
                 }
             }
@@ -916,15 +1078,15 @@ private fun SharedArtistTopBarProbe(
 private fun CustomCollapsingTopBar(
     artist: Artist,
     effectiveImageUrl: String?,
-    hasCustomImage: Boolean,
-    songsCount: Int,
+    fansCount: Int,
+    albumsCount: Int,
     collapseFraction: Float, // 0.0 = expanded, 1.0 = collapsed
     headerHeight: Dp,
     headerImageRequestSize: Size,
+    isLiked: Boolean,
+    onLikeClick: () -> Unit,
     onBackPressed: () -> Unit,
-    onPlayClick: () -> Unit,
-    onChangeImage: () -> Unit,
-    onClearCustomImage: () -> Unit
+    onPlayClick: () -> Unit
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val statusBarColor = if (LocalPixelPlayerDarkTheme.current) Color.Black.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.4f)
@@ -1034,45 +1196,24 @@ private fun CustomCollapsingTopBar(
 
                 // Image edit button (visible only when header is mostly expanded)
                 if (collapseFraction < 0.5f) {
-                    var showImageMenu by remember { mutableStateOf(false) }
-                    Box(
+                    Row(
                         modifier = Modifier
                             .align(Alignment.TopEnd)
                             .padding(end = 12.dp, top = 4.dp)
-                            .graphicsLayer { alpha = 1f - (collapseFraction * 4).coerceAtMost(1f) }
+                            .graphicsLayer { alpha = 1f - (collapseFraction * 4).coerceAtMost(1f) },
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         SmallFloatingActionButton(
-                            onClick = { showImageMenu = true },
+                            onClick = onLikeClick,
                             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
                             contentColor = MaterialTheme.colorScheme.onSurface
                         ) {
-                            Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.presentation_batch_d_edit_artist_image_cd))
-                        }
-                        DropdownMenu(
-                            expanded = showImageMenu,
-                            onDismissRequest = { showImageMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.presentation_batch_d_change_photo)) },
-                                leadingIcon = { Icon(Icons.Rounded.AddAPhoto, contentDescription = null) },
-                                onClick = {
-                                    showImageMenu = false
-                                    onChangeImage()
-                                }
-                            )
-                            if (hasCustomImage) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.presentation_batch_d_reset_to_default)) },
-                                    leadingIcon = { Icon(Icons.Rounded.Delete, contentDescription = null) },
-                                    onClick = {
-                                        showImageMenu = false
-                                        onClearCustomImage()
-                                    }
-                                )
-                            }
+                            val icon = if (isLiked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder
+                            val tint = if (isLiked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                            Icon(icon, contentDescription = null, tint = tint)
                         }
                     }
-                }
+                } // This closes the if statement
 
                 // Container box for the title
                 Box(
@@ -1105,7 +1246,7 @@ private fun CustomCollapsingTopBar(
                         )
 
                         Text(
-                            text = formatSongCount(songsCount),
+                            text = formatArtistStats(fansCount, albumsCount),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
