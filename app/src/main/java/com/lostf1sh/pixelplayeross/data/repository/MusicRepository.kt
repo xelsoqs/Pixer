@@ -267,6 +267,7 @@ interface MusicRepository {
      * @param isFavorite Target status.
      */
     suspend fun setFavoriteStatus(songId: String, isFavorite: Boolean)
+    suspend fun saveSong(song: Song)
 
     /**
      * Returns favorite song IDs directly from Room (favorites table).

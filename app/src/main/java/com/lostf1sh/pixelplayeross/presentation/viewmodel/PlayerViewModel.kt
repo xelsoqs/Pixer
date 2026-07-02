@@ -3382,6 +3382,9 @@ class PlayerViewModel @Inject constructor(
             val favoriteSongId = resolveFavoriteSongId(currentSong) ?: return@launch
             val currentlyFavorite = favoriteSongIds.value.contains(favoriteSongId)
             val targetState = !currentlyFavorite
+            if (targetState) {
+                musicRepository.saveSong(currentSong)
+            }
             setFavoriteStatusEverywhere(favoriteSongId, targetState)
             
             if (currentSong.contentUriString.startsWith("deezer://")) {
@@ -3405,6 +3408,9 @@ class PlayerViewModel @Inject constructor(
             val favoriteSongId = resolveFavoriteSongId(song) ?: return@launch
             val currentlyFavorite = favoriteSongIds.value.contains(favoriteSongId)
             val targetFavoriteState = if (removing) false else !currentlyFavorite
+            if (targetFavoriteState) {
+                musicRepository.saveSong(song)
+            }
             setFavoriteStatusEverywhere(favoriteSongId, targetFavoriteState)
             
             if (song.contentUriString.startsWith("deezer://")) {

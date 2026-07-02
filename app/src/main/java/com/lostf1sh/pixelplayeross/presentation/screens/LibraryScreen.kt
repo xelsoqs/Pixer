@@ -937,10 +937,7 @@ fun LibraryScreen(
                                     onFolderClick = { playerViewModel.navigateToFolder(it) },
                                     onNavigateBack = { playerViewModel.navigateBackFolder() },
                                     isShuffleEnabled = isShuffleEnabled,
-                                    showStorageFilterButton = currentTabId == LibraryTabId.PODCASTS ||
-                                            currentTabId == LibraryTabId.ALBUMS ||
-                                            currentTabId == LibraryTabId.ARTISTS ||
-                                            (ENABLE_FOLDERS_STORAGE_FILTER && false),
+                                    showStorageFilterButton = false,
                                     currentStorageFilter = playerUiState.currentStorageFilter,
                                     onStorageFilterClick = { playerViewModel.toggleStorageFilter() }
                                 )

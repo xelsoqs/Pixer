@@ -1255,14 +1255,9 @@ constructor(
         }
     }
 
-    val lastStorageFilterFlow: Flow<StorageFilter> =
-        dataStore.data.map { preferences ->
-            when (preferences[PreferencesKeys.LAST_STORAGE_FILTER]) {
-                "ONLINE"  -> StorageFilter.ONLINE
-                "OFFLINE" -> StorageFilter.OFFLINE
-                else      -> StorageFilter.ALL
-            }
-        }
+    val lastStorageFilterFlow: Flow<StorageFilter> = dataStore.data.map { preferences ->
+        StorageFilter.ALL
+    }.distinctUntilChanged()
 
     suspend fun saveLastStorageFilter(filter: StorageFilter) {
         dataStore.edit { preferences ->

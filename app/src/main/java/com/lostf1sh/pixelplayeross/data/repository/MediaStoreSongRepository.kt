@@ -568,6 +568,37 @@ class MediaStoreSongRepository @Inject constructor(
         }
     }
 
+    override suspend fun saveSong(song: Song) {
+        withContext(Dispatchers.IO) {
+            val id = song.id.toLongOrNull() ?: return@withContext
+            musicDao.insertArtistsIgnoreConflicts(listOf(
+                com.lostf1sh.pixelplayeross.data.database.ArtistEntity(id = song.artistId, name = song.artist, trackCount = 0)
+            ))
+            musicDao.insertAlbumsIgnoreConflicts(listOf(
+                com.lostf1sh.pixelplayeross.data.database.AlbumEntity(id = song.albumId, title = song.album, artistName = song.artist, artistId = song.artistId, albumArtUriString = song.albumArtUriString, songCount = 0, dateAdded = System.currentTimeMillis(), year = song.year ?: 0)
+            ))
+            musicDao.insertSongsIgnoreConflicts(listOf(
+                com.lostf1sh.pixelplayeross.data.database.SongEntity(
+                    id = id,
+                    title = song.title,
+                    artistName = song.artist,
+                    artistId = song.artistId,
+                    albumName = song.album,
+                    albumId = song.albumId,
+                    contentUriString = song.contentUriString,
+                    albumArtUriString = song.albumArtUriString,
+                    duration = song.duration,
+                    genre = null,
+                    trackNumber = song.trackNumber,
+                    discNumber = song.discNumber,
+                    filePath = "",
+                    parentDirectoryPath = "",
+                    sourceType = if (song.contentUriString.startsWith("deezer://")) com.lostf1sh.pixelplayeross.data.database.SourceType.DEEZER else com.lostf1sh.pixelplayeross.data.database.SourceType.LOCAL
+                )
+            ))
+        }
+    }
+
     override fun getFavoriteSongIdsFlow(): Flow<Set<String>> {
         return favoritesDao.getFavoriteSongIds().map { list -> list.map { it.toString() }.toSet() }
     }

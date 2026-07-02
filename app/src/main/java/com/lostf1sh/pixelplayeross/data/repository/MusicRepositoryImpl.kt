@@ -56,6 +56,7 @@ class MusicRepositoryImpl @Inject constructor(
     override fun getMusicByGenre(genreId: String): Flow<List<Song>> = flowOf(emptyList())
     override suspend fun toggleFavoriteStatus(songId: String): Boolean = false
     override suspend fun setFavoriteStatus(songId: String, isFavorite: Boolean) { songRepository.setFavoriteStatus(songId, isFavorite) }
+    override suspend fun saveSong(song: Song) { songRepository.saveSong(song) }
     override suspend fun getFavoriteSongIdsOnce(): Set<String> = songRepository.getFavoriteSongIdsOnce()
     override fun getFavoriteSongIdsFlow(): Flow<Set<String>> = songRepository.getFavoriteSongIdsFlow()
     override fun getSong(songId: String): Flow<Song?> = flowOf(null)

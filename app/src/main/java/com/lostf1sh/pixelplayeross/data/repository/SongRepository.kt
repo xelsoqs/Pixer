@@ -32,4 +32,5 @@ interface SongRepository {
         storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter
     ): List<Long>
     suspend fun setFavoriteStatus(songId: String, isFavorite: Boolean)
+    suspend fun saveSong(song: Song)
 }

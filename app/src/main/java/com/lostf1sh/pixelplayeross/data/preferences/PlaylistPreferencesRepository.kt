@@ -109,7 +109,7 @@ class PlaylistPreferencesRepository @Inject constructor(
                         sourceType = com.lostf1sh.pixelplayeross.data.database.SourceType.DEEZER,
                     )
                     allLovedSongs.add(song)
-                    allFavorites.add(FavoritesEntity(songId = songId, isFavorite = true, timestamp = System.currentTimeMillis()))
+                    allFavorites.add(FavoritesEntity(songId = songId, isFavorite = true, timestamp = System.currentTimeMillis() - (allFavorites.size * 1000L)))
                 }
                 
                 if (deezerTracks.size < limit) {
