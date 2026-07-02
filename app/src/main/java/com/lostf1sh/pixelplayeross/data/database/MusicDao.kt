@@ -1066,33 +1066,11 @@ interface MusicDao {
             albums.artist_id AS artist_id,
             albums.album_artist AS album_artist,
             albums.album_art_uri_string AS album_art_uri_string,
-            COUNT(songs.id) AS song_count,
+            albums.song_count AS song_count,
             albums.date_added AS date_added,
             albums.year AS year
-        FROM songs
-        INNER JOIN albums ON albums.id = songs.album_id
-        WHERE (:applyDirectoryFilter = 0 OR songs.source_type != 0 OR songs.parent_directory_path IN (:allowedParentDirs))
-        AND (
-            :filterMode = 0
-            OR (
-                :filterMode = 1
-                AND songs.source_type = 0
-            )
-            OR (
-                :filterMode = 2
-                AND songs.source_type != 0
-            )
-        )
-        GROUP BY
-            albums.id,
-            albums.title,
-            albums.artist_name,
-            albums.artist_id,
-            albums.album_artist,
-            albums.album_art_uri_string,
-            albums.date_added,
-            albums.year
-        HAVING COUNT(songs.id) >= :minTracks
+        FROM albums
+        WHERE albums.song_count >= :minTracks
         ORDER BY
             CASE WHEN :sortOrder = 'album_title_az' THEN albums.title END COLLATE NOCASE ASC,
             CASE WHEN :sortOrder = 'album_title_za' THEN albums.title END COLLATE NOCASE DESC,
@@ -1101,16 +1079,13 @@ interface MusicDao {
             CASE WHEN :sortOrder = 'album_release_year' THEN albums.year END DESC,
             CASE WHEN :sortOrder = 'album_release_year_asc' THEN albums.year END ASC,
             CASE WHEN :sortOrder = 'album_date_added' THEN albums.date_added END DESC,
-            CASE WHEN :sortOrder = 'album_size_asc' THEN song_count END ASC,
-            CASE WHEN :sortOrder = 'album_size_desc' THEN song_count END DESC,
+            CASE WHEN :sortOrder = 'album_size_asc' THEN albums.song_count END ASC,
+            CASE WHEN :sortOrder = 'album_size_desc' THEN albums.song_count END DESC,
             albums.title COLLATE NOCASE ASC,
             albums.artist_name COLLATE NOCASE ASC,
             albums.id ASC
     """)
     fun getAlbumsPaginated(
-        allowedParentDirs: List<String>,
-        applyDirectoryFilter: Boolean,
-        filterMode: Int,
         sortOrder: String,
         minTracks: Int
     ): PagingSource<Int, AlbumEntity>
@@ -1574,6 +1549,9 @@ interface MusicDao {
     @Query("DELETE FROM albums WHERE NOT EXISTS (SELECT 1 FROM songs WHERE songs.album_id = albums.id)")
     suspend fun deleteOrphanedAlbums()
 
+    @Query("DELETE FROM albums WHERE id NOT IN (:lovedAlbumIds) AND NOT EXISTS (SELECT 1 FROM songs WHERE songs.album_id = albums.id)")
+    suspend fun deleteUnlovedAlbums(lovedAlbumIds: List<Long>)
+
     /**
      * An artist is only orphaned when nothing references it: not the cross-ref table, not
      * songs.artist_id, and not songs.album_artist_id. The songs.artist_id check is load-bearing
@@ -1632,6 +1610,16 @@ interface MusicDao {
         genre: String?,
         trackNumber: Int,
         discNumber: Int?
+    )
+
+    @Query("""
+        UPDATE songs
+        SET album_id = :albumId
+        WHERE id = :songId
+    """)
+    suspend fun updateSongAlbumId(
+        songId: Long,
+        albumId: Long
     )
 
     @Transaction

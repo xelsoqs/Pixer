@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.withContext
+import com.lostf1sh.pixelplayeross.data.database.toAlbum
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -493,6 +494,40 @@ class MediaStoreSongRepository @Inject constructor(
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)
+    override fun getPaginatedAlbums(
+        sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption,
+        storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter,
+        minTracks: Int
+    ): Flow<PagingData<com.lostf1sh.pixelplayeross.data.model.Album>> {
+        return combine(
+            userPreferencesRepository.allowedDirectoriesFlow,
+            userPreferencesRepository.blockedDirectoriesFlow
+        ) { allowedDirs, blockedDirs ->
+            allowedDirs to blockedDirs
+        }.flatMapLatest { (allowedDirs, blockedDirs) ->
+            kotlinx.coroutines.flow.flow {
+                val (allowedParentDirs, applyDirectoryFilter) =
+                    computeAllowedDirs(allowedDirs, blockedDirs)
+                emit(
+                    androidx.paging.Pager(
+                        config = defaultPagingConfig,
+                        pagingSourceFactory = {
+                            musicDao.getAlbumsPaginated(
+                                sortOrder = sortOption.storageKey,
+                                minTracks = minTracks
+                            )
+                        }
+                    ).flow
+                )
+            }.flatMapLatest { it }
+        }.map { pagingData ->
+            pagingData.map { entity ->
+                entity.toAlbum()
+            }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun getPaginatedFavoriteSongs(
         sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption,
         storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter
@@ -565,6 +600,34 @@ class MediaStoreSongRepository @Inject constructor(
             } else {
                 favoritesDao.removeFavorite(id)
             }
+        }
+    }
+
+    override suspend fun updateSongMetadata(
+        songId: Long,
+        title: String,
+        artist: String,
+        artistId: Long,
+        artistsJson: String?,
+        album: String,
+        genre: String?,
+        trackNumber: Int,
+        discNumber: Int?
+    ) {
+        withContext(Dispatchers.IO) {
+            musicDao.updateSongMetadata(songId, title, artist, artistId, artistsJson, album, genre, trackNumber, discNumber)
+        }
+    }
+
+    override suspend fun updateSongAlbumId(songId: Long, albumId: Long) {
+        withContext(Dispatchers.IO) {
+            musicDao.updateSongAlbumId(songId, albumId)
+        }
+    }
+
+    override suspend fun updateSongAlbumArt(songId: Long, albumArtUri: String?) {
+        withContext(Dispatchers.IO) {
+            musicDao.updateSongAlbumArt(songId, albumArtUri)
         }
     }
 

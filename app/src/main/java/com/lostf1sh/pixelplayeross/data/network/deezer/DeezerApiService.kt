@@ -127,4 +127,36 @@ interface DeezerApiService {
         @retrofit2.http.Path("playlist_id") playlistId: String,
         @retrofit2.http.Header("authorization") auth: String
     ): retrofit2.Response<Unit>
+
+    @GET("track/{track_id}")
+    suspend fun getTrackInfo(
+        @retrofit2.http.Path("track_id") trackId: String,
+        @retrofit2.http.Header("authorization") auth: String
+    ): retrofit2.Response<DeezerTrackInfoResponse>
+    @retrofit2.http.GET("platform/generic/album/{album_id}")
+    suspend fun getAlbumInfo(
+        @retrofit2.http.Path("album_id") albumId: Long,
+        @retrofit2.http.Header("authorization") auth: String,
+        @retrofit2.http.Query("include") include: String = "lyrics"
+    ): DeezerAlbumMetadataResponse
+
+    @retrofit2.http.POST("platform/generic/album/{album_id}/like")
+    suspend fun likeAlbum(
+        @retrofit2.http.Path("album_id") albumId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): retrofit2.Response<Unit>
+
+    @retrofit2.http.DELETE("platform/generic/album/{album_id}/like")
+    suspend fun unlikeAlbum(
+        @retrofit2.http.Path("album_id") albumId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): retrofit2.Response<Unit>
+
+    @retrofit2.http.GET("platform/gcast/user/{user_id}/loved-albums")
+    suspend fun getGcastLovedAlbums(
+        @retrofit2.http.Path("user_id") userId: Long,
+        @retrofit2.http.Header("authorization") auth: String,
+        @retrofit2.http.Query("start") start: Int = 0,
+        @retrofit2.http.Query("limit") limit: Int = 50
+    ): DeezerLovedAlbumsResponse
 }

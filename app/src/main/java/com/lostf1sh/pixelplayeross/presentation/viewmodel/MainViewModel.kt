@@ -70,8 +70,10 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             android.util.Log.d("SyncDebug", "Calling playlistPreferencesRepository.syncLovedTracks()")
             playlistPreferencesRepository.syncLovedTracks()
+            android.util.Log.d("SyncDebug", "Calling playlistPreferencesRepository.syncLovedAlbums()")
+            playlistPreferencesRepository.syncLovedAlbums()
             playlistPreferencesRepository.syncUserPlaylists()
-            android.util.Log.d("SyncDebug", "Finished playlistPreferencesRepository.syncLovedTracks()")
+            android.util.Log.d("SyncDebug", "Finished playlistPreferencesRepository.syncLovedTracks() and syncLovedAlbums()")
         }
     }
     fun retrySync() {

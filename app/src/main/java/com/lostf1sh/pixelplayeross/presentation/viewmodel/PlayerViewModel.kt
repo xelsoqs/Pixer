@@ -94,6 +94,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -1016,6 +1017,70 @@ class PlayerViewModel @Inject constructor(
 
                     if (shouldReloadLyrics) {
                         lyricsStateHolder.loadLyricsForSong(hydratedSong, lyricsSourcePreference.value)
+                    }
+                }
+        }
+
+        viewModelScope.launch {
+            stablePlayerState
+                .map { it.currentSong }
+                .distinctUntilChanged()
+                .collectLatest { currentSong ->
+                    if (currentSong == null) return@collectLatest
+                    val songId = currentSong.id
+                    val isDeezer = songId.startsWith("deezer_") || currentSong.contentUriString.startsWith("deezer://track/")
+                    if (!isDeezer) return@collectLatest
+                    
+                    val rawId = if (songId.startsWith("deezer_")) songId.removePrefix("deezer_") else currentSong.contentUriString.removePrefix("deezer://track/")
+                    try {
+                        val trackInfo = deezerRepository.getTrackInfo(rawId)
+                        if (trackInfo != null) {
+                            val artistsStr = trackInfo.contributors.mapNotNull { it.name }.joinToString(", ")
+                            val coverXl = trackInfo.album?.coverXl ?: trackInfo.md5Image?.let { "https://e-cdns-images.dzcdn.net/images/cover/$it/1000x1000-000000-80-0-0.jpg" }
+                            
+                            if (artistsStr.isNotBlank() || coverXl != null) {
+                                val stateSong = playbackStateHolder.stablePlayerState.value.currentSong
+                                if (stateSong?.id == songId) {
+                                    var updatedSong = stateSong.copy(
+                                        artist = if (artistsStr.isNotBlank()) artistsStr else stateSong.artist,
+                                        albumArtUriString = coverXl ?: stateSong.albumArtUriString
+                                    )
+                                    val songIdLong = songId.removePrefix("deezer_").toLongOrNull()
+                                    if (songIdLong != null) {
+                                        // Update DB so that PlayerViewModel.repository observation picks it up
+                                        musicRepository.updateSongMetadata(
+                                            songId = songIdLong,
+                                            title = updatedSong.title,
+                                            artist = updatedSong.artist,
+                                            artistId = updatedSong.artistId,
+                                            artistsJson = null,
+                                            album = updatedSong.album,
+                                            genre = updatedSong.genre,
+                                            trackNumber = updatedSong.trackNumber,
+                                            discNumber = updatedSong.discNumber
+                                        )
+                                        if (coverXl != null) {
+                                            musicRepository.updateSongAlbumArt(songIdLong, coverXl)
+                                        }
+                                        trackInfo.album?.id?.let { deezerAlbumId ->
+                                            if (deezerAlbumId != 0L) {
+                                                musicRepository.updateSongAlbumId(songIdLong, deezerAlbumId)
+                                                updatedSong = updatedSong.copy(albumId = deezerAlbumId)
+                                            }
+                                        }
+                                        playbackStateHolder.updateStablePlayerState { state ->
+                                            if (state.currentSong?.id == songId) {
+                                                state.copy(currentSong = updatedSong)
+                                            } else {
+                                                state
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
                 }
         }
@@ -2242,11 +2307,6 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun triggerAlbumNavigationFromPlayer(albumId: Long) {
-        if (albumId == -1L) {
-            Timber.tag("AlbumDebug").d("triggerAlbumNavigationFromPlayer ignored invalid albumId=$albumId")
-            return
-        }
-
         val existingJob = albumNavigationJob
         if (existingJob != null && existingJob.isActive) {
             Timber.tag("AlbumDebug").d("triggerAlbumNavigationFromPlayer ignored; navigation already in progress for albumId=$albumId")
@@ -2259,6 +2319,43 @@ class PlayerViewModel @Inject constructor(
             Timber.tag("AlbumDebug").d(
                 "triggerAlbumNavigationFromPlayer: albumId=$albumId, songId=${currentSong?.id}, title=${currentSong?.title}"
             )
+
+            var resolvedAlbumId = albumId
+            // If albumId is 0 or -1, try to fetch the real album ID from track metadata
+            if (resolvedAlbumId <= 0L && currentSong != null) {
+                val isDeezer = currentSong.id.startsWith("deezer_") || currentSong.contentUriString.startsWith("deezer://track/")
+                if (isDeezer) {
+                    val rawId = if (currentSong.id.startsWith("deezer_")) currentSong.id.removePrefix("deezer_") else currentSong.contentUriString.removePrefix("deezer://track/")
+                    Timber.tag("AlbumDebug").d("albumId is 0, fetching from getTrackInfo for rawId=$rawId")
+                    try {
+                        val trackInfo = deezerRepository.getTrackInfo(rawId)
+                        val fetchedAlbumId = trackInfo?.album?.id ?: 0L
+                        Timber.tag("AlbumDebug").d("getTrackInfo returned album.id=$fetchedAlbumId")
+                        if (fetchedAlbumId != 0L) {
+                            resolvedAlbumId = fetchedAlbumId
+                            // Also update the song's albumId in DB and state for next time
+                            val songIdLong = rawId.toLongOrNull()
+                            if (songIdLong != null) {
+                                musicRepository.updateSongAlbumId(songIdLong, fetchedAlbumId)
+                            }
+                            playbackStateHolder.updateStablePlayerState { state ->
+                                val s = state.currentSong
+                                if (s?.id == currentSong.id) {
+                                    state.copy(currentSong = s.copy(albumId = fetchedAlbumId))
+                                } else state
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Timber.tag("AlbumDebug").e(e, "Failed to fetch albumId from track info")
+                    }
+                }
+            }
+
+            if (resolvedAlbumId <= 0L) {
+                Timber.tag("AlbumDebug").d("triggerAlbumNavigationFromPlayer: could not resolve albumId, aborting")
+                return@launch
+            }
+
             collapsePlayerSheet()
 
             withTimeoutOrNull(900) {
@@ -2266,7 +2363,7 @@ class PlayerViewModel @Inject constructor(
                 awaitPlayerCollapse()
             }
 
-            _albumNavigationRequests.emit(albumId)
+            _albumNavigationRequests.emit(resolvedAlbumId)
         }
     }
 

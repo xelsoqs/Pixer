@@ -165,3 +165,68 @@ data class DeezerLyricsItem(
     @SerializedName("duration") val duration: String? = null,
     @SerializedName("line") val line: String? = null
 )
+
+data class DeezerTrackInfoResponse(
+    @SerializedName("id") val id: Long,
+    @SerializedName("contributors") val contributors: List<DeezerContributor> = emptyList(),
+    @SerializedName("md5_image") val md5Image: String? = null,
+    @SerializedName("album") val album: DeezerAlbumInfo? = null
+)
+
+data class DeezerContributor(
+    @SerializedName("id") val id: Long,
+    @SerializedName("name") val name: String? = null
+)
+
+data class DeezerAlbumInfo(
+    @SerializedName("id") val id: Long,
+    @SerializedName("cover_xl") val coverXl: String? = null
+)
+
+data class DeezerAlbumMetadataResponse(
+    @SerializedName("data") val data: DeezerAlbumMetadataData? = null
+)
+
+data class DeezerAlbumMetadataData(
+    @SerializedName("id") val id: String? = null,
+    @SerializedName("attributes") val attributes: DeezerAlbumMetadataAttributes? = null,
+    @SerializedName("included") val included: List<DeezerTrack>? = null
+)
+
+data class DeezerAlbumMetadataAttributes(
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("artist") val artist: DeezerAlbumArtist? = null,
+    @SerializedName("image") val image: DeezerImage? = null,
+    @SerializedName("nb_tracks") val nbTracks: Int = 0,
+    @SerializedName("duration") val duration: Int = 0,
+    @SerializedName("release_date") val releaseDate: String? = null,
+    @SerializedName("nb_fans") val fans: Int? = null
+)
+
+data class DeezerAlbumArtist(
+    @SerializedName("id") val id: Long = 0,
+    @SerializedName("name") val name: String? = null
+)
+
+data class DeezerLovedAlbumsResponse(
+    @SerializedName("data") val data: DeezerLovedAlbumsData? = null
+)
+
+data class DeezerLovedAlbumsData(
+    @SerializedName("included") val included: List<DeezerAlbumItem>? = null
+)
+
+data class DeezerAlbumItem(
+    @SerializedName("id") val id: String? = null,
+    @SerializedName("type") val type: String? = null,
+    @SerializedName("attributes") val attributes: DeezerAlbumItemAttributes? = null
+)
+
+data class DeezerAlbumItemAttributes(
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("artist") val artist: DeezerAlbumArtist? = null,
+    @SerializedName("image") val image: DeezerImage? = null,
+    @SerializedName("nb_tracks") val nbTracks: Int = 0,
+    @SerializedName("duration") val duration: Int = 0,
+    @SerializedName("release_date") val releaseDate: String? = null
+)

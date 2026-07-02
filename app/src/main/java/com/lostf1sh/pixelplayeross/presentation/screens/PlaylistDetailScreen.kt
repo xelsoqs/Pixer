@@ -328,8 +328,10 @@ fun PlaylistDetailScreen(
                         if (!collapsed && (currentPlaylist?.creatorName != null || currentPlaylist?.fans != null)) {
                             val extraInfo = buildString {
                                 if (currentPlaylist.creatorName != null) append("By ${currentPlaylist.creatorName}")
-                                if (currentPlaylist.creatorName != null && currentPlaylist.fans != null) append(" • ")
-                                if (currentPlaylist.fans != null) append("${formatLikes(currentPlaylist.fans)} likes")
+                                if (currentPlaylist.fans != null && currentPlaylist.fans > 0) {
+                                    if (currentPlaylist.creatorName != null && currentPlaylist.fans != null) append(" • ")
+                                    append("${formatLikes(currentPlaylist.fans)} likes")
+                                }
                             }
                             Text(
                                 text = extraInfo,

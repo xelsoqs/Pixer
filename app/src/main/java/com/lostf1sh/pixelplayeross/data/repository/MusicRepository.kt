@@ -267,6 +267,23 @@ interface MusicRepository {
      * @param isFavorite Target status.
      */
     suspend fun setFavoriteStatus(songId: String, isFavorite: Boolean)
+
+    suspend fun updateSongMetadata(
+        songId: Long,
+        title: String,
+        artist: String,
+        artistId: Long,
+        artistsJson: String?,
+        album: String,
+        genre: String?,
+        trackNumber: Int,
+        discNumber: Int?
+    )
+
+    suspend fun updateSongAlbumId(songId: Long, albumId: Long)
+
+    suspend fun updateSongAlbumArt(songId: Long, albumArtUri: String?)
+
     suspend fun saveSong(song: Song)
 
     /**

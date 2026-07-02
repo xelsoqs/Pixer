@@ -6,6 +6,7 @@ import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerMultiFlowResponse
 import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerPlaylistDetailResponse
 import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerRecommendedPlaylistsResponse
 import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerStreamUrlsResponse
+import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerTrackInfoResponse
 import com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository
 import kotlinx.coroutines.flow.firstOrNull
 import javax.inject.Inject
@@ -215,6 +216,69 @@ class DeezerRepository @Inject constructor(
         } catch (e: Exception) {
             e.printStackTrace()
             false
+        }
+    }
+
+    suspend fun getTrackInfo(trackId: String): DeezerTrackInfoResponse? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            val response = deezerApiService.getTrackInfo(trackId, auth)
+            if (response.isSuccessful) {
+                response.body()
+            } else {
+                timber.log.Timber.e("Error fetching track info: ${response.code()} ${response.errorBody()?.string()}")
+                null
+            }
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception fetching track info")
+            null
+        }
+    }
+
+    suspend fun getAlbumInfo(albumId: Long): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerAlbumMetadataResponse? {
+        val auth = getAuthHeader()
+        timber.log.Timber.tag("AlbumDebug").d("DeezerRepository.getAlbumInfo($albumId), auth is null? ${auth == null}")
+        if (auth == null) return null
+        return try {
+            val response = deezerApiService.getAlbumInfo(albumId, auth)
+            timber.log.Timber.tag("AlbumDebug").d("DeezerRepository.getAlbumInfo response: $response")
+            response
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception fetching album info for albumId=$albumId")
+            null
+        }
+    }
+
+    suspend fun likeAlbum(albumId: Long): Boolean {
+        val auth = getAuthHeader() ?: return false
+        return try {
+            val response = deezerApiService.likeAlbum(albumId, auth)
+            response.isSuccessful
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception liking album")
+            false
+        }
+    }
+
+    suspend fun unlikeAlbum(albumId: Long): Boolean {
+        val auth = getAuthHeader() ?: return false
+        return try {
+            val response = deezerApiService.unlikeAlbum(albumId, auth)
+            response.isSuccessful
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception unliking album")
+            false
+        }
+    }
+
+    suspend fun getGcastLovedAlbums(start: Int = 0, limit: Int = 50): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerLovedAlbumsResponse? {
+        val auth = getAuthHeader() ?: return null
+        val userId = getUserId() ?: return null
+        return try {
+            deezerApiService.getGcastLovedAlbums(userId, auth, start, limit)
+        } catch (e: Exception) {
+            timber.log.Timber.e(e, "Exception fetching loved albums")
+            null
         }
     }
 }

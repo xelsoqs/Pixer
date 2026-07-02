@@ -36,6 +36,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LargeExtendedFloatingActionButton
 import androidx.compose.material3.MaterialTheme
@@ -373,6 +376,7 @@ fun AlbumDetailScreen(
                         SharedAlbumTopBarProbe(
                             album = album,
                             songsCount = songs.size,
+                            fansCount = uiState.fans,
                             collapseFraction = collapseFraction,
                             headerHeight = currentTopBarHeightDp,
                             headerImageRequestSize = headerImageRequestSize,
@@ -384,15 +388,17 @@ fun AlbumDetailScreen(
                             onBackPressed = { navController.popBackStack() },
                             onPlayClick = {
                                 if (songs.isNotEmpty()) {
-                                    val randomSong = songs.random()
-                                    playerViewModel.showAndPlaySong(randomSong, songs)
+                                    playerViewModel.playSongsShuffled(songs, queueName = album.title, startAtZero = true)
                                 }
-                            }
+                            },
+                            isLiked = uiState.isLiked,
+                            onLikeClick = { viewModel.toggleAlbumLike() }
                         )
                     } else {
                         CollapsingAlbumTopBar(
                             album = album,
                             songsCount = songs.size,
+                            fansCount = uiState.fans,
                             collapseFraction = collapseFraction,
                             headerHeight = currentTopBarHeightDp,
                             headerImageRequestSize = headerImageRequestSize,
@@ -404,10 +410,11 @@ fun AlbumDetailScreen(
                             onBackPressed = { navController.popBackStack() },
                             onPlayClick = {
                                 if (songs.isNotEmpty()) {
-                                    val randomSong = songs.random()
-                                    playerViewModel.showAndPlaySong(randomSong, songs)
+                                    playerViewModel.playSongsShuffled(songs, queueName = album.title, startAtZero = true)
                                 }
-                            }
+                            },
+                            isLiked = uiState.isLiked,
+                            onLikeClick = { viewModel.toggleAlbumLike() }
                         )
                     }
                 }
@@ -517,12 +524,15 @@ fun AlbumDetailScreen(
 private fun SharedAlbumTopBarProbe(
     album: Album,
     songsCount: Int,
+    fansCount: Int,
     collapseFraction: Float,
     headerHeight: Dp,
     headerImageRequestSize: Size,
     onHeaderArtworkState: ((AsyncImagePainter.State) -> Unit)? = null,
     onBackPressed: () -> Unit,
-    onPlayClick: () -> Unit
+    onPlayClick: () -> Unit,
+    isLiked: Boolean,
+    onLikeClick: () -> Unit
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val statusBarColor =
@@ -587,9 +597,19 @@ private fun SharedAlbumTopBarProbe(
                 .align(Alignment.TopCenter)
         )
 
+        val subtitleText = buildString {
+            append(album.artist)
+            append(" • ")
+            append(formatSongCount(songsCount))
+            // Only show likes when the header is expanded (less than 50% collapsed)
+            if (fansCount > 0 && collapseFraction < 0.5f) {
+                append("\n${formatLikes(fansCount)} likes")
+            }
+        }
+
         CollapsibleCommonTopBar(
             title = album.title,
-            subtitle = "${album.artist} • ${formatSongCount(songsCount)}",
+            subtitle = subtitleText,
             collapseFraction = collapseFraction,
             headerHeight = headerHeight,
             onBackClick = onBackPressed,
@@ -612,7 +632,20 @@ private fun SharedAlbumTopBarProbe(
             contentColor = MaterialTheme.colorScheme.onSurface,
             subtitleColor = MaterialTheme.colorScheme.onSurfaceVariant,
             fadeSubtitleOnCollapse = false,
-            syncStatusBarWithContainer = false
+            syncStatusBarWithContainer = false,
+            actions = {
+                FilledIconButton(
+                    modifier = Modifier.padding(end = 12.dp),
+                    onClick = onLikeClick,
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                ) {
+                    Icon(
+                        imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = "Like album",
+                        tint = if (isLiked) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                    )
+                }
+            }
         )
 
         LargeExtendedFloatingActionButton(
@@ -638,12 +671,15 @@ private fun SharedAlbumTopBarProbe(
 private fun CollapsingAlbumTopBar(
     album: Album,
     songsCount: Int,
+    fansCount: Int,
     collapseFraction: Float,
     headerHeight: Dp,
     headerImageRequestSize: Size,
     onHeaderArtworkState: ((AsyncImagePainter.State) -> Unit)? = null,
     onBackPressed: () -> Unit,
-    onPlayClick: () -> Unit
+    onPlayClick: () -> Unit,
+    isLiked: Boolean,
+    onLikeClick: () -> Unit
 ) {
     val surfaceColor = MaterialTheme.colorScheme.surface
     val statusBarColor =
@@ -748,6 +784,20 @@ private fun CollapsingAlbumTopBar(
                     Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.auth_cd_back))
                 }
 
+                FilledIconButton(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(end = 12.dp, top = 4.dp),
+                    onClick = onLikeClick,
+                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
+                ) {
+                    Icon(
+                        imageVector = if (isLiked) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder,
+                        contentDescription = "Like album",
+                        tint = if (isLiked) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                    )
+                }
+
                 Box(
                     modifier = Modifier
                         .align(animatedTitleAlignment)
@@ -776,12 +826,16 @@ private fun CollapsingAlbumTopBar(
                             maxLines = titleMaxLines,
                             overflow = TextOverflow.Ellipsis
                         )
+                        val subtitleText = buildString {
+                            append(album.artist)
+                            append(" • ")
+                            if (fansCount > 0) {
+                                append("${formatLikes(fansCount)} fans • ")
+                            }
+                            append(formatSongCount(songsCount))
+                        }
                         Text(
-                            text = stringResource(
-                                R.string.album_detail_meta_line,
-                                album.artist,
-                                formatSongCount(songsCount)
-                            ),
+                            text = subtitleText,
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,

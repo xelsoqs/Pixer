@@ -153,6 +153,73 @@ class PlaylistPreferencesRepository @Inject constructor(
         }
     }
 
+    suspend fun syncLovedAlbums() {
+        android.util.Log.d("SyncDebug", "syncLovedAlbums() started")
+        try {
+            var currentStart = 0
+            val limit = 50
+            val allLovedAlbums = mutableListOf<com.lostf1sh.pixelplayeross.data.database.AlbumEntity>()
+
+            while (true) {
+                android.util.Log.d("SyncDebug", "syncLovedAlbums() fetching start $currentStart")
+                val response = deezerRepository.getGcastLovedAlbums(start = currentStart, limit = limit)
+                val deezerAlbums = response?.data?.included
+                
+                if (deezerAlbums.isNullOrEmpty()) {
+                    break
+                }
+
+                deezerAlbums.forEach { albumItem ->
+                    val albumIdStr = albumItem.id
+                    val albumId = albumIdStr?.toLongOrNull() ?: return@forEach
+                    val albumEntity = com.lostf1sh.pixelplayeross.data.database.AlbumEntity(
+                        id = albumId,
+                        title = albumItem.attributes?.name ?: "Unknown Album",
+                        artistName = albumItem.attributes?.artist?.name ?: "Unknown Artist",
+                        artistId = albumItem.attributes?.artist?.id ?: 0L,
+                        albumArtUriString = albumItem.attributes?.image?.let { it.full ?: it.large ?: it.medium },
+                        songCount = albumItem.attributes?.nbTracks ?: 0,
+                        dateAdded = System.currentTimeMillis(), // We could parse timestamp if needed
+                        year = albumItem.attributes?.releaseDate?.take(4)?.toIntOrNull() ?: 0
+                    )
+                    allLovedAlbums.add(albumEntity)
+                }
+                
+                if (deezerAlbums.size < limit) {
+                    break
+                }
+                currentStart += limit
+            }
+
+            if (allLovedAlbums.isNotEmpty()) {
+                android.util.Log.d("SyncDebug", "syncLovedAlbums() inserting ${allLovedAlbums.size} into database...")
+                // Insert corresponding artists first to satisfy foreign key if needed
+                val artistsToInsert = allLovedAlbums.map { 
+                    com.lostf1sh.pixelplayeross.data.database.ArtistEntity(
+                        id = it.artistId,
+                        name = it.artistName,
+                        trackCount = 0
+                    )
+                }.distinctBy { it.id }
+                musicDao.insertArtistsIgnoreConflicts(artistsToInsert)
+                
+                musicDao.insertAlbumsIgnoreConflicts(allLovedAlbums)
+                
+                // Remove albums that are no longer loved (and have no local songs)
+                val lovedAlbumIds = allLovedAlbums.map { it.id }
+                musicDao.deleteUnlovedAlbums(lovedAlbumIds)
+                
+                android.util.Log.d("SyncDebug", "syncLovedAlbums() inserted successfully.")
+            } else {
+                // If the user unliked all their albums, we need to clear them all out
+                musicDao.deleteUnlovedAlbums(emptyList())
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("SyncDebug", "syncLovedAlbums() error: ${e.message}", e)
+            e.printStackTrace()
+        }
+    }
+
     suspend fun optimisticLikePlaylist(playlist: Playlist) {
         val entity = PlaylistEntity(
             id = playlist.id,

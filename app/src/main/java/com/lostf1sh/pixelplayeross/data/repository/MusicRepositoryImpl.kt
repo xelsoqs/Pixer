@@ -16,7 +16,7 @@ class MusicRepositoryImpl @Inject constructor(
 ) : MusicRepository {
     override fun getAudioFiles(): Flow<List<Song>> = songRepository.getSongs()
     override fun getPaginatedSongs(sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter): Flow<PagingData<Song>> = songRepository.getPaginatedSongs(sortOption, storageFilter)
-    override fun getPaginatedAlbums( sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter , minTracks: Int  ): Flow<PagingData<Album>> = emptyFlow()
+    override fun getPaginatedAlbums( sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter , minTracks: Int  ): Flow<PagingData<Album>> = songRepository.getPaginatedAlbums(sortOption, storageFilter, minTracks)
     override fun getPaginatedArtists( sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter  ): Flow<PagingData<Artist>> = emptyFlow()
     override fun getPaginatedFavoriteSongs( sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption, storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter  ): Flow<PagingData<Song>> = songRepository.getPaginatedFavoriteSongs(sortOption, storageFilter)
     override suspend fun getFavoriteSongsOnce( storageFilter: com.lostf1sh.pixelplayeross.data.model.StorageFilter, sortOption: com.lostf1sh.pixelplayeross.data.model.SortOption ): List<Song> = songRepository.getFavoriteSongsOnce(storageFilter, sortOption)
@@ -56,6 +56,15 @@ class MusicRepositoryImpl @Inject constructor(
     override fun getMusicByGenre(genreId: String): Flow<List<Song>> = flowOf(emptyList())
     override suspend fun toggleFavoriteStatus(songId: String): Boolean = false
     override suspend fun setFavoriteStatus(songId: String, isFavorite: Boolean) { songRepository.setFavoriteStatus(songId, isFavorite) }
+    override suspend fun updateSongMetadata(songId: Long, title: String, artist: String, artistId: Long, artistsJson: String?, album: String, genre: String?, trackNumber: Int, discNumber: Int?) {
+        songRepository.updateSongMetadata(songId, title, artist, artistId, artistsJson, album, genre, trackNumber, discNumber)
+    }
+    override suspend fun updateSongAlbumId(songId: Long, albumId: Long) {
+        songRepository.updateSongAlbumId(songId, albumId)
+    }
+    override suspend fun updateSongAlbumArt(songId: Long, albumArtUri: String?) {
+        songRepository.updateSongAlbumArt(songId, albumArtUri)
+    }
     override suspend fun saveSong(song: Song) { songRepository.saveSong(song) }
     override suspend fun getFavoriteSongIdsOnce(): Set<String> = songRepository.getFavoriteSongIdsOnce()
     override fun getFavoriteSongIdsFlow(): Flow<Set<String>> = songRepository.getFavoriteSongIdsFlow()
