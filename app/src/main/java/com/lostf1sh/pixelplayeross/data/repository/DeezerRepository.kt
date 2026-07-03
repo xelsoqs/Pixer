@@ -96,6 +96,26 @@ class DeezerRepository @Inject constructor(
         }
     }
 
+    suspend fun getInspiredByMix(index: Int): DeezerPlaylistDetailResponse? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            deezerApiService.getInspiredByMix(index, auth)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun getDiscoveryMix(): DeezerPlaylistDetailResponse? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            deezerApiService.getDiscoveryMix(auth)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
     suspend fun getRecommendedPlaylists(): DeezerRecommendedPlaylistsResponse? {
         val auth = getAuthHeader() ?: return null
         val userId = getUserId() ?: return null

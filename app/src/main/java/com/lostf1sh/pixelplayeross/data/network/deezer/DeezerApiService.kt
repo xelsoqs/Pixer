@@ -205,4 +205,17 @@ interface DeezerApiService {
         @retrofit2.http.Path("user_id") userId: Long,
         @retrofit2.http.Header("authorization") auth: String
     ): DeezerArtistsListResponse
+
+    // --- SmartTrackList Endpoints ---
+
+    @GET("platform/generic/smarttracklist/inspired-by-{index}?include=lyrics")
+    suspend fun getInspiredByMix(
+        @retrofit2.http.Path("index") index: Int,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerPlaylistDetailResponse
+
+    @GET("platform/generic/smarttracklist/discovery?include=lyrics")
+    suspend fun getDiscoveryMix(
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerPlaylistDetailResponse
 }

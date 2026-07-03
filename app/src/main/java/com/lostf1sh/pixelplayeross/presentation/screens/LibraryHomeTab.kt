@@ -150,6 +150,7 @@ fun mapDeezerTrackToSong(track: DeezerTrack): Song {
         albumArtUriString = track.attributes?.image?.medium ?: track.attributes?.image?.large,
         highResAlbumArtUriString = track.attributes?.image?.large ?: track.attributes?.image?.full,
         bitrate = 320,
-        sampleRate = 44100
+        sampleRate = 44100,
+        isExplicit = track.attributes?.explicitLyrics == true || track.attributes?.explicitContentLyrics == 1 || track.attributes?.explicit == true
     )
 }

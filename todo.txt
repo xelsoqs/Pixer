@@ -20,3 +20,6 @@ implement random
 search
 
 more user details in settings account page
+
+
+add a 2 peak corousel setting appearance

@@ -54,7 +54,9 @@ data class DeezerTrackAttributes(
     @SerializedName("albumName") val albumName: String? = null,
     @SerializedName("duration") val duration: Int = 0,
     @SerializedName("image") val image: DeezerImage? = null,
-    @SerializedName("explicit") val explicit: Boolean? = null
+    @SerializedName("explicit") val explicit: Boolean? = null,
+    @SerializedName("explicit_lyrics") val explicitLyrics: Boolean? = null,
+    @SerializedName("explicit_content_lyrics") val explicitContentLyrics: Int? = null
 )
 
 data class DeezerRecommendedPlaylistsResponse(
@@ -72,6 +74,8 @@ data class DeezerPlaylist(
 
 data class DeezerPlaylistAttributes(
     @SerializedName("name") val name: String? = null,
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("description") val description: String? = null,
     @SerializedName("image") val image: DeezerImage? = null,
     @SerializedName("nb_tracks") val nbTracks: Int? = null,
     @SerializedName("fans") val fans: Int? = null,

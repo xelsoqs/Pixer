@@ -776,7 +776,7 @@ fun PlaylistDetailScreen(
                         ) {
                             itemsIndexed(
                                 localReorderableSongs,
-                                key = { _, item -> item.id },
+                                key = { index, item -> "${item.id}_$index" },
                                 contentType = { _, _ -> "playlist_song" }) { _, song ->
                                 ReorderableItem(
                                     state = reorderableState,

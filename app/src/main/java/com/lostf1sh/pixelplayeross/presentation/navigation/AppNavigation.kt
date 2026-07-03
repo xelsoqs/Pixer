@@ -358,6 +358,26 @@ fun AppNavigation(
                     }
                 }
             }
+            composable(
+                route = Screen.SmartTrackList.route,
+                arguments = listOf(navArgument("listType") { type = NavType.StringType }),
+                enterTransition = { enterTransition() },
+                exitTransition = { exitTransition() },
+                popEnterTransition = { popEnterTransition() },
+                popExitTransition = { popExitTransition() },
+            ) { backStackEntry ->
+                val listType = backStackEntry.arguments?.getString("listType")
+                if (listType != null) {
+                    ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
+                        com.lostf1sh.pixelplayeross.presentation.screens.SmartTrackListScreen(
+                            listType = listType,
+                            playerViewModel = playerViewModel,
+                            onBackClick = { navController.popBackStack() },
+                            navController = navController
+                        )
+                    }
+                }
+            }
 
             composable(
                 Screen.DJSpace.route,

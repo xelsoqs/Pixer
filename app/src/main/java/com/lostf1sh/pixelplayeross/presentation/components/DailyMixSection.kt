@@ -33,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -69,6 +70,8 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 fun DailyMixSection(
     songs: ImmutableList<Song>,
     playerViewModel: PlayerViewModel,
+    title: String? = null,
+    subtitle: String? = null,
     onClickOpen: () -> Unit = {},
     onNavigateToAlbum: (Song) -> Unit = {},
     onNavigateToArtist: (Song) -> Unit = {},
@@ -94,6 +97,8 @@ fun DailyMixSection(
         DailyMixCard(
             songs = songs,
             playerViewModel = playerViewModel,
+            title = title,
+            subtitle = subtitle,
             onClickOpen = onClickOpen,
             onMoreOptionsClick = { song ->
                 playerViewModel.selectSongForInfo(song)
@@ -181,6 +186,8 @@ fun DailyMixSection(
 @Composable
 private fun DailyMixCard(
     songs: ImmutableList<Song>,
+    title: String? = null,
+    subtitle: String? = null,
     onClickOpen: () -> Unit,
     playerViewModel: PlayerViewModel,
     onMoreOptionsClick: (Song) -> Unit
@@ -205,7 +212,7 @@ private fun DailyMixCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            DailyMixHeader(thumbnails = headerSongs)
+            DailyMixHeader(thumbnails = headerSongs, title = title, subtitle = subtitle, onClick = onClickOpen)
             DailyMixSongList(
                 songs = visibleSongs,
                 playbackQueue = songs,
@@ -230,7 +237,7 @@ private fun DailyMixCard(
 }
 
 @Composable
-fun DailyMixHeader(thumbnails: ImmutableList<Song>) {
+fun DailyMixHeader(thumbnails: ImmutableList<Song>, title: String? = null, subtitle: String? = null, onClick: () -> Unit = {}) {
     val titleStyle = rememberDailyMixTitleStyle()
 
     fun shapeConditionalModifier(index: Int): Modifier {
@@ -255,7 +262,8 @@ fun DailyMixHeader(thumbnails: ImmutableList<Song>) {
                         MaterialTheme.colorScheme.tertiary //.copy(alpha = 0.7f)
                     )
                 )
-            ),
+            )
+            .clickable { onClick() },
         contentAlignment = Alignment.CenterStart
     ) {
         Row(
@@ -267,13 +275,13 @@ fun DailyMixHeader(thumbnails: ImmutableList<Song>) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = stringResource(R.string.presentation_batch_g_daily_mix_heading),
+                    text = title ?: stringResource(R.string.presentation_batch_g_daily_mix_heading),
                     style = titleStyle,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
                 Text(
                     modifier = Modifier.padding(start = 1.dp),
-                    text = stringResource(R.string.presentation_batch_g_daily_mix_based_on_history),
+                    text = subtitle ?: stringResource(R.string.presentation_batch_g_daily_mix_based_on_history),
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Normal,
                     color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)

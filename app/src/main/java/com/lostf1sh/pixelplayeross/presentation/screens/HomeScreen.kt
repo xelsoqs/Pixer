@@ -113,7 +113,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.clickable
@@ -135,7 +137,7 @@ fun HomeScreen(
     paddingValuesParent: PaddingValues,
     playerViewModel: PlayerViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
-    libraryViewModel: com.lostf1sh.pixelplayeross.presentation.viewmodel.LibraryViewModel = hiltViewModel(),
+    libraryViewModel: com.lostf1sh.pixelplayeross.presentation.viewmodel.LibraryViewModel = hiltViewModel(androidx.compose.ui.platform.LocalContext.current as androidx.activity.ComponentActivity),
     onOpenSidebar: () -> Unit
 ) {
     val context = LocalContext.current
@@ -145,45 +147,18 @@ fun HomeScreen(
     }
     val statsViewModel: StatsViewModel = hiltViewModel()
     val settingsUiState by settingsViewModel.uiState.collectAsStateWithLifecycle()
-    val dailyMixSongs by playerViewModel.dailyMixSongs.collectAsStateWithLifecycle()
-    val curatedYourMixSongs by playerViewModel.yourMixSongs.collectAsStateWithLifecycle()
-    val homeMixPreviewSongs by playerViewModel.homeMixPreviewSongs.collectAsStateWithLifecycle()
     val playbackHistory by playerViewModel.playbackHistory.collectAsStateWithLifecycle()
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val flowConfigsState by libraryViewModel.deezerFlowConfigs.collectAsState()
     val playlists by libraryViewModel.deezerRecommendedPlaylists.collectAsState()
+    val yourMixes by libraryViewModel.yourMixes.collectAsState()
+    val yourMixSongs by libraryViewModel.yourMixSongs.collectAsState()
+    val yourDiscovery by libraryViewModel.yourDiscovery.collectAsState()
+    
     val flowConfigs = flowConfigsState?.data?.included ?: emptyList()
     val recommendedPlaylists = playlists?.data?.included ?: emptyList()
     val coroutineScope = rememberCoroutineScope()
-
-
-    val usesFallbackHomeMix = remember(curatedYourMixSongs, dailyMixSongs) {
-        curatedYourMixSongs.isEmpty() && dailyMixSongs.isEmpty()
-    }
-    val yourMixSongs = remember(curatedYourMixSongs, dailyMixSongs, homeMixPreviewSongs) {
-        when {
-            curatedYourMixSongs.isNotEmpty() -> curatedYourMixSongs
-            dailyMixSongs.isNotEmpty() -> dailyMixSongs
-            else -> homeMixPreviewSongs
-        }
-    }
-    var homePlaceholderRefreshGeneration by rememberSaveable { mutableIntStateOf(0) }
-    var hasHomeLoadingMinimumElapsed by rememberSaveable(homePlaceholderRefreshGeneration) {
-        mutableStateOf(false)
-    }
-
-    LaunchedEffect(homePlaceholderRefreshGeneration, yourMixSongs.isEmpty()) {
-        if (yourMixSongs.isEmpty()) {
-            hasHomeLoadingMinimumElapsed = false
-            delay(HomeLoadingPlaceholderMinDurationMillis)
-            hasHomeLoadingMinimumElapsed = true
-        } else {
-            hasHomeLoadingMinimumElapsed = true
-        }
-    }
-
-    val shouldShowYourMixLoadingPlaceholder = yourMixSongs.isEmpty() && !hasHomeLoadingMinimumElapsed
     val recentSongIds = remember(playbackHistory) {
         collectRecentlyPlayedSongIds(
             playbackHistory = playbackHistory,
@@ -233,10 +208,8 @@ fun HomeScreen(
     }
 
     ReportDrawnWhen {
-        yourMixSongs.isNotEmpty() || hasHomeLoadingMinimumElapsed || isBenchmarkMode
+        yourMixes.isNotEmpty() || isBenchmarkMode
     }
-
-    val yourMixSong: String = "Today's Mix for you"
 
     // 2) Observe only the currentSong (or null) to know whether to show padding
     val currentSong by remember(playerViewModel.stablePlayerState) {
@@ -294,8 +267,8 @@ fun HomeScreen(
 
     LaunchedEffect(
         needsScrollRestore,
-        yourMixSongs.isNotEmpty(),
-        dailyMixSongs.isNotEmpty(),
+        yourMixes.isNotEmpty(),
+        yourDiscovery != null,
         recentlyPlayedSongs.size,
         homeStatsOverview
     ) {
@@ -336,28 +309,7 @@ fun HomeScreen(
                 )
             }
         ) { innerPadding ->
-            val collagesongs = remember(yourMixSongs) {
-                if (yourMixSongs.isNotEmpty()) yourMixSongs
-                else {
-                    (1..6).map { i ->
-                        Song(
-                            id = "placeholder_$i",
-                            title = "Track $i",
-                            artist = "Artist $i",
-                            artistId = 0L,
-                            album = "Album $i",
-                            albumId = 0L,
-                            path = "",
-                            contentUriString = "",
-                            albumArtUriString = null,
-                            duration = 0L,
-                            mimeType = null,
-                            bitrate = null,
-                            sampleRate = null
-                        )
-                    }
-                }
-            }
+
             LazyColumn(
                 state = listState,
                 modifier = Modifier
@@ -389,7 +341,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            items(flowConfigs, key = { it.id }) { config ->
+                            itemsIndexed(flowConfigs, key = { index, _ -> "flow_$index" }) { _, config ->
                                 DeezerHomeFlowConfigItem(config = config, onClick = {
                                     coroutineScope.launch {
                                         val flowTracksResponse = libraryViewModel.getMultiFlowTracks(config.links?.self ?: return@launch)
@@ -400,6 +352,56 @@ fun HomeScreen(
                                             playerViewModel.playSongs(songsToPlay, song, config.attributes?.title ?: "Flow", null, config.links?.self)
                                         }
                                     }
+                                })
+                            }
+                        }
+                    }
+                }
+
+                // Your Mix section always visible to avoid pop-in
+                item(
+                    key = "your_mix_header",
+                    contentType = "your_mix_header"
+                ) {
+                    YourMixHeader(
+                        song = "Today, we made for you",
+                        isShuffleEnabled = isShuffleEnabled,
+                        onPlayShuffled = {
+                            if (yourMixes.isNotEmpty()) {
+                                val randomMix = yourMixes.random()
+                                val randomMixTracks = randomMix.included.map { mapDeezerTrackToSong(it) }
+                                if (randomMixTracks.isNotEmpty()) {
+                                    playerViewModel.playSongsShuffled(
+                                        songsToPlay = randomMixTracks.toImmutableList(),
+                                        queueName = randomMix.attributes?.title ?: randomMix.attributes?.name ?: "Your Mix",
+                                        startAtZero = true
+                                    )
+                                }
+                            }
+                        }
+                    )
+                }
+                item(
+                    key = "your_mix_list",
+                    contentType = "your_mix_list"
+                ) {
+                    if (yourMixes.isEmpty()) {
+                        // Show a loading indicator or placeholder if needed, or just keep it empty height
+                        Box(modifier = Modifier.fillMaxWidth().height(140.dp).padding(16.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator()
+                        }
+                    } else {
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp),
+                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            itemsIndexed(yourMixes, key = { index, _ -> "yourmix_$index" }) { _, mix ->
+                                val playlist = com.lostf1sh.pixelplayeross.data.network.deezer.DeezerPlaylist(
+                                    id = mix.id,
+                                    attributes = mix.attributes
+                                )
+                                DeezerHomePlaylistItem(playlist = playlist, onClick = {
+                                    navController.navigate(Screen.SmartTrackList.createRoute(mix.id))
                                 })
                             }
                         }
@@ -425,7 +427,7 @@ fun HomeScreen(
                             contentPadding = PaddingValues(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            items(recommendedPlaylists, key = { it.id }) { playlist ->
+                            itemsIndexed(recommendedPlaylists, key = { index, _ -> "recommended_$index" }) { _, playlist ->
                                 DeezerHomePlaylistItem(playlist = playlist, onClick = {
                                     navController.navigate(Screen.PlaylistDetail.createRoute("deezer_${playlist.id}"))
                                 })
@@ -434,96 +436,18 @@ fun HomeScreen(
                     }
                 }
 
-                if (yourMixSongs.isEmpty() && flowConfigs.isEmpty() && recommendedPlaylists.isEmpty()) {
+                val discoveryTracks = yourDiscovery?.included?.map { mapDeezerTrackToSong(it) } ?: emptyList()
+                if (discoveryTracks.isNotEmpty()) {
                     item(
-                        key = "your_mix_placeholder",
-                        contentType = "your_mix_placeholder"
-                    ) {
-                        if (shouldShowYourMixLoadingPlaceholder) {
-                            YourMixLoadingPlaceholder()
-                        } else {
-                            YourMixEmptyPlaceholder(
-                                onRefresh = {
-                                    homePlaceholderRefreshGeneration++
-                                    settingsViewModel.refreshLibrary()
-                                    playerViewModel.forceUpdateDailyMix()
-                                }
-                            )
-                        }
-                    }
-                }
-
-
-                item(
-                    key = "your_mix_header",
-                    contentType = "your_mix_header"
-                ) {
-                    YourMixHeader(
-                        song = yourMixSong,
-                        isShuffleEnabled = isShuffleEnabled,
-                        onPlayShuffled = {
-                            if (yourMixSongs.isNotEmpty()) {
-                                if (usesFallbackHomeMix) {
-                                    playerViewModel.shuffleAllSongs(queueName = "Your Mix")
-                                } else {
-                                    playerViewModel.playSongsShuffled(
-                                        songsToPlay = yourMixSongs,
-                                        queueName = "Your Mix",
-                                        startAtZero = true,
-                                    )
-                                }
-                            }
-                        }
-                    )
-                }
-
-                // Collage
-                item(
-                    key = "album_art_collage",
-                    contentType = "album_art_collage"
-                ) {
-                    val basePattern = settingsUiState.collagePattern
-                    val isAutoRotate = settingsUiState.collageAutoRotate
-                    val patterns = remember { CollagePattern.entries }
-
-                    val activePattern = if (isAutoRotate) {
-                        var rotationIndex by rememberSaveable { mutableIntStateOf(-1) }
-                        LaunchedEffect(Unit) { rotationIndex++ }
-                        remember(rotationIndex) {
-                            patterns[rotationIndex.coerceAtLeast(0) % patterns.size]
-                        }
-                    } else {
-                        basePattern
-                    }
-
-                    AlbumArtCollage(
-                        modifier = Modifier.fillMaxWidth(),
-                        songs = collagesongs.toImmutableList(),
-                        padding = 14.dp,
-                        height = 400.dp,
-                        pattern = activePattern,
-                        onSongClick = { song ->
-                            if (yourMixSongs.isNotEmpty()) {
-                                if (usesFallbackHomeMix) {
-                                    playerViewModel.showAndPlaySongFromLibrary(song, queueName = "Your Mix")
-                                } else {
-                                    playerViewModel.showAndPlaySong(song, yourMixSongs, "Your Mix")
-                                }
-                            }
-                        }
-                    )
-                }
-
-                // Daily Mix
-                if (dailyMixSongs.isNotEmpty()) {
-                    item(
-                        key = "daily_mix_section",
-                        contentType = "daily_mix_section"
+                        key = "your_discovery_section",
+                        contentType = "your_discovery_section"
                     ) {
                         DailyMixSection(
-                            songs = dailyMixSongs,
+                            songs = discoveryTracks.toImmutableList(),
+                            title = "Your Discovery",
+                            subtitle = yourDiscovery?.attributes?.description ?: "Based on your recent listening",
                             onClickOpen = {
-                                navController.navigateSafely(Screen.DailyMixScreen.route)
+                                navController.navigate(Screen.SmartTrackList.createRoute("discovery"))
                             },
                             onNavigateToAlbum = { song ->
                                 navController.navigateSafelyReplacing(
@@ -761,13 +685,13 @@ fun YourMixHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(256.dp)
+            .height(180.dp)
             .padding(16.dp)
     ) {
         Column(
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(top = 48.dp, start = 12.dp)
+                .padding(top = 16.dp, start = 12.dp)
         ) {
             // Your Mix Title
             Text(
@@ -1023,7 +947,7 @@ fun DeezerHomePlaylistItem(playlist: DeezerPlaylist, onClick: () -> Unit) {
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = playlist.attributes?.name ?: "Unknown",
+            text = playlist.attributes?.title ?: playlist.attributes?.name ?: "Unknown",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Bold,
             maxLines = 2,
