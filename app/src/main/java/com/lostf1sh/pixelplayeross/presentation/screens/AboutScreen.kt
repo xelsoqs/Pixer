@@ -119,31 +119,31 @@ private data class Contributor(
     val contributions: Int? = null,
 )
 
-private val CoreMaintainer = Contributor(
+private val CurrentMaintainer = Contributor(
+    id = "minugarc",
+    displayName = "@Minuga-RC",
+    role = "FOSS Maintainer",
+    detail = "Maintains Pixer.",
+    avatarUrl = "https://github.com/Minuga-RC.png",
+    iconRes = R.drawable.round_developer_board_24,
+    githubUrl = "https://github.com/Minuga-RC"
+)
+
+private val OriginalCreator = Contributor(
     id = "lostf1sh",
     displayName = "@lostf1sh",
-    role = "FOSS Maintainer",
-    detail = "Maintains PixelPlayerOSS. GitHub and Telegram: @lostf1sh.",
+    role = "Original FOSS Creator",
+    detail = "Creator of the PixelPlayerOSS project that Pixer is based on.",
     avatarUrl = "https://github.com/lostf1sh.png",
     iconRes = R.drawable.round_developer_board_24,
-    githubUrl = "https://github.com/lostf1sh",
+    githubUrl = "https://github.com/lostf1sh/PixelPlayerOSS",
     telegramUrl = "https://t.me/lostf1sh",
 )
 
-private val NonFossMaintainer = Contributor(
-    id = "theovilardo",
-    displayName = "@theovilardo",
-    role = "Author / Non-FOSS Maintainer",
-    detail = "Author and maintainer of the original Google Play / non-FOSS PixelPlayer release.",
-    badge = "Original app",
-    avatarUrl = "https://github.com/theovilardo.png",
-    iconRes = R.drawable.round_developer_board_24,
-    githubUrl = "https://github.com/theovilardo",
-)
 
 private val AboutMaintainers = listOf(
-    CoreMaintainer,
-    NonFossMaintainer,
+    CurrentMaintainer,
+    OriginalCreator
 )
 
 // AboutTopBar removed, replaced by CollapsibleCommonTopBar

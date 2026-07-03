@@ -308,6 +308,41 @@ class MainActivity : ComponentActivity() {
                             }
                         )
                     }
+
+                    // Update Checker Dialog
+                    val updateAvailable by mainViewModel.updateAvailable.collectAsStateWithLifecycle()
+                    if (updateAvailable != null) {
+                        androidx.compose.material3.AlertDialog(
+                            onDismissRequest = { mainViewModel.dismissUpdate() },
+                            title = { Text("Update Available") },
+                            text = { 
+                                Column {
+                                    Text("A new version of Pixer (${updateAvailable?.tagName}) is available on GitHub.")
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Text("What's new:\n${updateAvailable?.body ?: "Bug fixes and improvements."}")
+                                }
+                            },
+                            confirmButton = {
+                                androidx.compose.material3.TextButton(
+                                    onClick = {
+                                        val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(updateAvailable?.htmlUrl))
+                                        this@MainActivity.startActivity(intent)
+                                    }
+                                ) {
+                                    Text("Update")
+                                }
+                            },
+                            dismissButton = {
+                                androidx.compose.material3.TextButton(
+                                    onClick = { 
+                                        mainViewModel.dismissUpdate()
+                                    }
+                                ) {
+                                    Text("Later")
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }

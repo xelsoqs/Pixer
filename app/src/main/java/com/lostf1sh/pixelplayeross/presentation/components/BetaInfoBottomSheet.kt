@@ -70,8 +70,8 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 @Composable
 fun BetaInfoBottomSheet(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    val issuesUrl = "https://github.com/lostf1sh/PixelPlayerOSS/issues"
-    val reportUrl = "https://github.com/lostf1sh/PixelPlayerOSS/issues/new/choose"
+    val issuesUrl = "https://github.com/Minuga-RC/Pixer/issues"
+    val reportUrl = "https://github.com/Minuga-RC/Pixer/issues/new/choose"
 
     val fabCornerRadius = 18.dp
 
@@ -89,7 +89,7 @@ fun BetaInfoBottomSheet(modifier: Modifier = Modifier) {
             item(key = "header") {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = stringResource(R.string.presentation_batch_g_beta_sheet_version),
+                        text = com.lostf1sh.pixelplayeross.BuildConfig.VERSION_NAME,
                         fontFamily = RoundedSans,
                         style = ExpTitleTypography.displaySmall,
                         color = MaterialTheme.colorScheme.onSurface
@@ -158,7 +158,7 @@ fun BetaInfoBottomSheet(modifier: Modifier = Modifier) {
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = stringResource(R.string.presentation_batch_g_beta_sheet_welcome_title),
+                                text = stringResource(R.string.presentation_batch_g_beta_sheet_welcome_title, com.lostf1sh.pixelplayeross.BuildConfig.VERSION_NAME),
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.onSurface
                             )

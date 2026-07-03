@@ -396,6 +396,17 @@ object AppModule {
         return retrofit.create(LrcLibApiService::class.java)
     }
 
+    @Provides
+    @Singleton
+    fun provideGitHubApiService(okHttpClient: OkHttpClient): com.lostf1sh.pixelplayeross.data.network.GitHubApiService {
+        val retrofit = Retrofit.Builder()
+            .baseUrl("https://api.github.com/")
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+        return retrofit.create(com.lostf1sh.pixelplayeross.data.network.GitHubApiService::class.java)
+    }
+
     /**
      * Provides a Retrofit instance for the Deezer API.
      */

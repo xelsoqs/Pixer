@@ -16,13 +16,44 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 import com.lostf1sh.pixelplayeross.data.preferences.PlaylistPreferencesRepository
+import com.lostf1sh.pixelplayeross.data.repository.UpdateCheckerRepository
+import com.lostf1sh.pixelplayeross.data.network.GitHubRelease
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
     private val musicRepository: MusicRepository,
     private val userPreferencesRepository: UserPreferencesRepository,
-    private val playlistPreferencesRepository: PlaylistPreferencesRepository
+    private val playlistPreferencesRepository: PlaylistPreferencesRepository,
+    private val updateCheckerRepository: UpdateCheckerRepository
 ) : ViewModel() {
+
+    private val _updateAvailable = MutableStateFlow<GitHubRelease?>(null)
+    val updateAvailable: StateFlow<GitHubRelease?> = _updateAvailable.asStateFlow()
+
+    private val _changelogs = MutableStateFlow<List<GitHubRelease>?>(null)
+    val changelogs: StateFlow<List<GitHubRelease>?> = _changelogs.asStateFlow()
+
+    init {
+        checkForUpdates()
+    }
+
+    private fun checkForUpdates() {
+        viewModelScope.launch {
+            val update = updateCheckerRepository.getLatestReleaseIfNewer()
+            _updateAvailable.value = update
+            
+            // Also fetch changelogs for the bottom sheet
+            val logs = updateCheckerRepository.getChangelogs()
+            _changelogs.value = logs
+        }
+    }
+
+    fun dismissUpdate() {
+        _updateAvailable.value = null
+    }
+
 
     val isSetupComplete: StateFlow<Boolean?> = userPreferencesRepository.initialSetupDoneFlow
         .map { it as Boolean? }

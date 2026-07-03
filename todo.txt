@@ -8,12 +8,15 @@ bring back daily mix card from the main app home (fill with place holder)
 bring back recently played from the main app make it work
 
 lastfm
-discord rpc
+discord rpc [not possible]
 deezer based shuffling toggle
 
 ask to enable animated lyrics and crossfade in setup
-more login info stuff in setup
+more login info stuff in setup (2 ways to login)
 fix liked songs order
 recents tab in library
+add playback reporting back to deezer
+implement random
+search
 
 more user details in settings account page
