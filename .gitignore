@@ -5,6 +5,9 @@ hs_err_pid*.log
 *.apk
 *.aab
 **.jks
+*.keystore
+*keystore.properties
+*key.properties
 
 .idea/
 
@@ -25,6 +28,7 @@ keystore.properties
 /.idea/planningMode.xml
 
 /build
+/docs/signing_tutorial.md
 /captures
 .externalNativeBuild
 .cxx
