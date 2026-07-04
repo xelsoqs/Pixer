@@ -20,10 +20,10 @@
 </p>
 
 <p align="center">
-  <img src="assets/screenshot1.png" alt="PixelPlayerOSS home screen" width="205"/>
-  <img src="assets/screenshot2.png" alt="PixelPlayerOSS now playing screen" width="205"/>
-  <img src="assets/screenshot3.png" alt="PixelPlayerOSS library screen" width="205"/>
-  <img src="assets/screenshot4.png" alt="PixelPlayerOSS lyrics screen" width="205"/>
+  <img src="assets/screenshot1.png" alt="Pixer home screen" width="205"/>
+  <img src="assets/screenshot2.png" alt="Pixer now playing screen" width="205"/>
+  <img src="assets/screenshot3.png" alt="Pixer library screen" width="205"/>
+  <img src="assets/screenshot4.png" alt="Pixer lyrics screen" width="205"/>
 </p>
 
 ## What It Is
