@@ -256,3 +256,45 @@ data class DeezerArtistItemAttributes(
     @SerializedName("nbFans") val nbFans: Int = 0,
     @SerializedName("pictures") val pictures: DeezerImage? = null
 )
+
+data class DeezerGenericSearchResponse(
+    @SerializedName("data") val data: List<DeezerGenericSearchItem> = emptyList()
+)
+
+data class DeezerGenericSearchResponseObject(
+    @SerializedName("data") val data: DeezerGenericSearchItem? = null
+)
+
+data class DeezerGenericSearchItem(
+    @SerializedName("type") val type: String? = null,
+    @SerializedName("id") val id: String,
+    @SerializedName("attributes") val attributes: DeezerGenericSearchAttributes? = null,
+    @SerializedName("included") val included: List<DeezerGenericSearchItem>? = null
+)
+
+data class DeezerGenericSearchAttributes(
+    @SerializedName("id") val id: Long? = null,
+    @SerializedName("name") val name: String? = null,
+    @SerializedName("title") val title: String? = null,
+    @SerializedName("artistName") val artistName: String? = null,
+    @SerializedName("artistId") val artistId: Long? = null,
+    @SerializedName("albumId") val albumId: Long? = null,
+    @SerializedName("albumName") val albumName: String? = null,
+    @SerializedName("duration") val duration: Int? = null,
+    @SerializedName("explicit") val explicit: Boolean? = null,
+    @SerializedName("explicit_lyrics") val explicitLyrics: Boolean? = null,
+    @SerializedName("explicit_content_lyrics") val explicitContentLyrics: Int? = null,
+    @SerializedName("nb_tracks") val nbTracks: Int? = null,
+    @SerializedName("fans") val fans: Int? = null,
+    @SerializedName("nbFans") val nbFans: Long? = null,
+    @SerializedName("public") val isPublic: Boolean? = null,
+    @SerializedName("image") val image: DeezerImage? = null,
+    @SerializedName("pictures") val pictures: DeezerImage? = null,
+    @SerializedName("artist") val artist: DeezerArtistCompact? = null,
+    @SerializedName("creator") val creator: DeezerCreator? = null
+)
+
+data class DeezerArtistCompact(
+    @SerializedName("id") val id: Long,
+    @SerializedName("name") val name: String? = null
+)

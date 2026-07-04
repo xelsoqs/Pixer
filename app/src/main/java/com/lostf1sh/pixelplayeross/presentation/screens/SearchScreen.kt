@@ -126,11 +126,24 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
 import timber.log.Timber
 import com.lostf1sh.pixelplayeross.presentation.components.subcomps.EnhancedSongListItem
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.items
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 
 private data class SearchUiSlice(
     val selectedSearchFilter: SearchFilterType = SearchFilterType.ALL,
-    val searchResults: ImmutableList<SearchResultItem> = persistentListOf()
+    val searchResults: ImmutableList<SearchResultItem> = persistentListOf(),
+    val bestSearchResults: ImmutableList<SearchResultItem> = persistentListOf(),
+    val recentlySearched: ImmutableList<SearchResultItem> = persistentListOf(),
+    val isSearching: Boolean = false
 )
+
+private enum class SearchListState {
+    LOADING,
+    EMPTY,
+    RESULTS
+}
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
@@ -154,7 +167,10 @@ fun SearchScreen(
             .map { uiState ->
                 SearchUiSlice(
                     selectedSearchFilter = uiState.selectedSearchFilter,
-                    searchResults = uiState.searchResults
+                    searchResults = uiState.searchResults,
+                    bestSearchResults = uiState.bestSearchResults,
+                    recentlySearched = uiState.recentlySearched,
+                    isSearching = uiState.isSearching
                 )
             }
             .distinctUntilChanged()
@@ -359,17 +375,29 @@ fun SearchScreen(
                 label = "search_mode_transition"
             ) { isGenreMode ->
                 if (isGenreMode) {
-                    GenreCategoriesGrid(
-                        genres = genres,
-                        onGenreClick = { genre ->
-                            Timber.tag("SearchScreen")
-                                .d("Genre clicked: ${genre.name} (ID: ${genre.id})")
-                            val encodedGenreId = java.net.URLEncoder.encode(genre.id, "UTF-8")
-                            navController.navigateSafely(Screen.GenreDetail.createRoute(encodedGenreId))
-                        },
-                        playerViewModel = playerViewModel,
-                        modifier = Modifier.padding(top = 12.dp)
-                    )
+                    if (searchUiState.recentlySearched.isNotEmpty()) {
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            RecentlySearchedList(
+                                recentlySearched = searchUiState.recentlySearched,
+                                playerViewModel = playerViewModel,
+                                navController = navController,
+                                currentPlayingSongId = stablePlayerState.currentSong?.id,
+                                isPlaying = stablePlayerState.isPlaying,
+                                onSongMoreOptionsClick = handleSongMoreOptionsClick,
+                                onItemSelected = { /* do nothing on select from recent */ }
+                            )
+                        }
+                    } else {
+                        // Empty state for recently searched or loading
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(stringResource(R.string.recent_searches), style = MaterialTheme.typography.bodyLarge)
+                        }
+                    }
                 } else {
                     Column(
                         modifier = Modifier
@@ -389,31 +417,54 @@ fun SearchScreen(
                             SearchFilterChip(SearchFilterType.ARTISTS, currentFilter, playerViewModel)
                             SearchFilterChip(SearchFilterType.PLAYLISTS, currentFilter, playerViewModel)
                         }
+                        val listState = if (searchUiState.isSearching) {
+                            SearchListState.LOADING
+                        } else if (searchResults.isEmpty()) {
+                            SearchListState.EMPTY
+                        } else {
+                            SearchListState.RESULTS
+                        }
+                        
                         Crossfade(
-                            targetState = searchResults.isEmpty(),
+                            targetState = listState,
                             animationSpec = tween(durationMillis = 190),
                             label = "search_results_fade"
-                        ) { isEmpty ->
-                            if (isEmpty) {
-                                EmptySearchResults(
-                                    searchQuery = searchQuery,
-                                    colorScheme = colorScheme
-                                )
-                            } else {
-                                SearchResultsList(
-                                    results = searchResults,
-                                    searchQuery = searchQuery,
-                                    playerViewModel = playerViewModel,
-                                    onItemSelected = {
-                                        if (searchQuery.isNotBlank()) {
-                                            playerViewModel.onSearchQuerySubmitted(searchQuery)
-                                        }
-                                    },
-                                    currentPlayingSongId = stablePlayerState.currentSong?.id,
-                                    isPlaying = stablePlayerState.isPlaying,
-                                    onSongMoreOptionsClick = handleSongMoreOptionsClick,
-                                    navController = navController
-                                )
+                        ) { state ->
+                            when (state) {
+                                SearchListState.LOADING -> {
+                                    Box(
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        androidx.compose.material3.CircularProgressIndicator(
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
+                                SearchListState.EMPTY -> {
+                                    EmptySearchResults(
+                                        searchQuery = searchQuery,
+                                        colorScheme = colorScheme
+                                    )
+                                }
+                                SearchListState.RESULTS -> {
+                                    SearchResultsList(
+                                        bestSearchResults = searchUiState.bestSearchResults,
+                                        results = searchResults,
+                                        searchQuery = searchQuery,
+                                        playerViewModel = playerViewModel,
+                                        onItemSelected = {
+                                            if (searchQuery.isNotBlank()) {
+                                                playerViewModel.onSearchQuerySubmitted(searchQuery)
+                                            }
+                                        },
+                                        currentPlayingSongId = stablePlayerState.currentSong?.id,
+                                        isPlaying = stablePlayerState.isPlaying,
+                                        onSongMoreOptionsClick = handleSongMoreOptionsClick,
+                                        navController = navController,
+                                        currentFilter = currentFilter
+                                    )
+                                }
                             }
                         }
                     }
@@ -667,6 +718,7 @@ fun EmptySearchResults(searchQuery: String, colorScheme: ColorScheme) {
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun SearchResultsList(
+    bestSearchResults: List<SearchResultItem>,
     results: List<SearchResultItem>,
     searchQuery: String,
     playerViewModel: PlayerViewModel,
@@ -674,7 +726,8 @@ fun SearchResultsList(
     currentPlayingSongId: String?,
     isPlaying: Boolean,
     onSongMoreOptionsClick: (Song) -> Unit,
-    navController: NavHostController
+    navController: NavHostController,
+    currentFilter: SearchFilterType
 ) {
     val localDensity = LocalDensity.current
     val playerStableState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
@@ -738,6 +791,10 @@ fun SearchResultsList(
     val imePadding = WindowInsets.ime.getBottom(localDensity).dp
     val systemBarPaddingBottom = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 94.dp
 
+    val showBestResultsAtTop = currentFilter == SearchFilterType.ALL
+
+    val coroutineScope = rememberCoroutineScope()
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -752,8 +809,26 @@ fun SearchResultsList(
             bottom = if (imePadding <= 8.dp) (MiniPlayerHeight + systemBarPaddingBottom) else imePadding
         )
     ) {
+        if (bestSearchResults.isNotEmpty() && showBestResultsAtTop) {
+            renderBestResults(
+                bestSearchResults = bestSearchResults,
+                navController = navController,
+                playerViewModel = playerViewModel,
+                isPlaying = isPlaying,
+                currentPlayingSongId = currentPlayingSongId,
+                onSongMoreOptionsClick = onSongMoreOptionsClick,
+                onItemSelected = onItemSelected,
+                coroutineScope = coroutineScope
+            )
+        }
+        
         sectionOrder.forEach { filterType ->
-            val itemsForSection = groupedResults[filterType] ?: emptyList()
+            val allItemsForSection = groupedResults[filterType] ?: emptyList()
+            val itemsForSection = if (currentFilter == SearchFilterType.ALL) {
+                allItemsForSection.take(5)
+            } else {
+                allItemsForSection
+            }
 
             if (itemsForSection.isNotEmpty()) {
                 item(key = "header_${filterType.name}") {
@@ -806,7 +881,10 @@ fun SearchResultsList(
                                     {
                                         Timber.tag("SearchScreen")
                                             .d("Album clicked: ${item.album.title}")
-                                        playerViewModel.playAlbum(item.album)
+                                        navController.navigateSafelyReplacing(
+                                            route = Screen.AlbumDetail.createRoute(item.album.id, autoPlay = true),
+                                            patternToPop = Screen.AlbumDetail.route
+                                        )
                                         onItemSelected()
                                     }
                                 }
@@ -834,7 +912,10 @@ fun SearchResultsList(
                                     {
                                         Timber.tag("SearchScreen")
                                             .d("Artist clicked: ${item.artist.name}")
-                                        playerViewModel.playArtist(item.artist)
+                                        navController.navigateSafelyReplacing(
+                                            route = Screen.ArtistDetail.createRoute(item.artist.id, autoPlay = true),
+                                            patternToPop = Screen.ArtistDetail.route
+                                        )
                                         onItemSelected()
                                     }
                                 }
@@ -863,20 +944,11 @@ fun SearchResultsList(
                                 }.collectAsStateWithLifecycle(initialValue = emptyList())
                                 val coroutineScope = rememberCoroutineScope()
                                 val onPlayClick: () -> Unit = {
-                                    coroutineScope.launch {
-                                        val songs = playerViewModel.getSongs(item.playlist.songIds)
-                                        if (songs.isNotEmpty()) {
-                                            playerViewModel.playSongs(
-                                                songs,
-                                                songs.first(),
-                                                item.playlist.name
-                                            )
-                                            if (playerStableState.isShuffleEnabled) playerViewModel.toggleShuffle()
-                                        } else {
-                                            playerViewModel.sendToast("Empty playlist")
-                                        }
-                                        onItemSelected()
-                                    }
+                                    navController.navigateSafelyReplacing(
+                                        route = Screen.PlaylistDetail.createRoute(item.playlist.id, autoPlay = true),
+                                        patternToPop = Screen.PlaylistDetail.route
+                                    )
+                                    onItemSelected()
                                 }
                                 val onOpenClick = remember(
                                     item.playlist,
@@ -896,6 +968,121 @@ fun SearchResultsList(
                             }
                         }
                     }
+                }
+            }
+        }
+        
+        if (bestSearchResults.isNotEmpty() && !showBestResultsAtTop) {
+            renderBestResults(
+                bestSearchResults = bestSearchResults,
+                navController = navController,
+                playerViewModel = playerViewModel,
+                isPlaying = isPlaying,
+                currentPlayingSongId = currentPlayingSongId,
+                onSongMoreOptionsClick = onSongMoreOptionsClick,
+                onItemSelected = onItemSelected,
+                coroutineScope = coroutineScope
+            )
+        }
+    }
+}
+
+fun LazyListScope.renderBestResults(
+    bestSearchResults: List<SearchResultItem>,
+    navController: NavHostController,
+    playerViewModel: PlayerViewModel,
+    isPlaying: Boolean,
+    currentPlayingSongId: String?,
+    onSongMoreOptionsClick: (Song) -> Unit,
+    onItemSelected: () -> Unit,
+    coroutineScope: CoroutineScope
+) {
+    item(key = "header_best_results") {
+        SearchResultSectionHeader(title = "Best Results")
+    }
+    items(
+        count = bestSearchResults.size,
+        key = { index ->
+            when (val item = bestSearchResults[index]) {
+                is SearchResultItem.SongItem -> "best_song_${item.song.id}"
+                is SearchResultItem.AlbumItem -> "best_album_${item.album.id}"
+                is SearchResultItem.ArtistItem -> "best_artist_${item.artist.id}"
+                is SearchResultItem.PlaylistItem -> "best_playlist_${item.playlist.id}_$index"
+            }
+        },
+        contentType = { index ->
+            when (bestSearchResults[index]) {
+                is SearchResultItem.SongItem -> "best_search_song"
+                is SearchResultItem.AlbumItem -> "best_search_album"
+                is SearchResultItem.ArtistItem -> "best_search_artist"
+                is SearchResultItem.PlaylistItem -> "best_search_playlist"
+            }
+        }
+    ) { index ->
+        val item = bestSearchResults[index]
+        Box(modifier = Modifier.padding(bottom = 12.dp)) {
+            when (item) {
+                is SearchResultItem.SongItem -> {
+                    EnhancedSongListItem(
+                        song = item.song,
+                        isPlaying = isPlaying,
+                        isCurrentSong = currentPlayingSongId == item.song.id,
+                        onMoreOptionsClick = onSongMoreOptionsClick,
+                        onClick = {
+                            playerViewModel.showAndPlaySong(item.song, listOf(item.song), "Best Results")
+                            onItemSelected()
+                        }
+                    )
+                }
+                is SearchResultItem.AlbumItem -> {
+                    SearchResultAlbumItem(
+                        album = item.album,
+                        onOpenClick = {
+                            navController.navigate(Screen.AlbumDetail.createRoute(item.album.id))
+                        },
+                        onPlayClick = {
+                            navController.navigateSafelyReplacing(
+                                route = Screen.AlbumDetail.createRoute(item.album.id, autoPlay = true),
+                                patternToPop = Screen.AlbumDetail.route
+                            )
+                            onItemSelected()
+                        }
+                    )
+                }
+                is SearchResultItem.ArtistItem -> {
+                    SearchResultArtistItem(
+                        artist = item.artist,
+                        onOpenClick = {
+                            navController.navigate(Screen.ArtistDetail.createRoute(item.artist.id))
+                        },
+                        onPlayClick = {
+                            navController.navigateSafelyReplacing(
+                                route = Screen.ArtistDetail.createRoute(item.artist.id, autoPlay = true),
+                                patternToPop = Screen.ArtistDetail.route
+                            )
+                            onItemSelected()
+                        }
+                    )
+                }
+                is SearchResultItem.PlaylistItem -> {
+                    val playlistSongs by remember(item.playlist.songIds, playerViewModel) {
+                        playerViewModel.observeSongs(item.playlist.songIds)
+                    }.collectAsStateWithLifecycle(initialValue = emptyList())
+                    
+                    SearchResultPlaylistItem(
+                        playlist = item.playlist,
+                        playlistSongs = playlistSongs,
+                        onOpenClick = {
+                            navController.navigate(Screen.PlaylistDetail.createRoute(item.playlist.id))
+                        },
+                        onPlayClick = {
+                            navController.navigateSafelyReplacing(
+                                route = Screen.PlaylistDetail.createRoute(item.playlist.id, autoPlay = true),
+                                patternToPop = Screen.PlaylistDetail.route
+                            )
+                            onItemSelected()
+                        }
+                    )
                 }
             }
         }
@@ -1043,7 +1230,17 @@ fun SearchResultArtistItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = formatSongCount(artist.songCount),
+                    text = if (artist.fanCount > 0) {
+                        if (artist.fanCount >= 1_000_000) {
+                            String.format("%.1fM Fans", artist.fanCount / 1_000_000.0)
+                        } else if (artist.fanCount >= 1_000) {
+                            String.format("%.1fK Fans", artist.fanCount / 1_000.0)
+                        } else {
+                            "${artist.fanCount} Fans"
+                        }
+                    } else {
+                        formatSongCount(artist.songCount)
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1113,7 +1310,11 @@ fun SearchResultPlaylistItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = formatSongCount(playlist.songIds.size),
+                    text = if (playlist.nbTracks != null) {
+                        formatSongCount(playlist.nbTracks)
+                    } else {
+                        formatSongCount(playlist.songIds.size)
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1173,4 +1374,178 @@ fun SearchFilterChip(
              null
          }
     )
+}
+
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+fun RecentlySearchedList(
+    recentlySearched: List<SearchResultItem>,
+    playerViewModel: PlayerViewModel,
+    navController: NavHostController,
+    currentPlayingSongId: String?,
+    isPlaying: Boolean,
+    onSongMoreOptionsClick: (Song) -> Unit,
+    onItemSelected: () -> Unit
+) {
+    val localDensity = LocalDensity.current
+    val navBarCompactMode by playerViewModel.navBarCompactMode.collectAsStateWithLifecycle()
+    val systemNavBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
+    val imePadding = WindowInsets.ime.asPaddingValues().calculateBottomPadding()
+    val systemBarPaddingBottom = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
+
+    val onSongResultClick: (Song) -> Unit = remember(playerViewModel, recentlySearched, onItemSelected) {
+        { song ->
+            val index = recentlySearched.indexOfFirst { it is SearchResultItem.SongItem && it.song.id == song.id }
+            if (index != -1) {
+                val songList = recentlySearched.filterIsInstance<SearchResultItem.SongItem>().map { it.song }
+                val songIndex = songList.indexOf(song)
+                if (songIndex != -1) {
+                    playerViewModel.playSongs(
+                        songsToPlay = songList,
+                        startSong = song,
+                        queueName = "Recently Searched"
+                    )
+                } else {
+                    playerViewModel.playSong(song)
+                }
+            } else {
+                playerViewModel.playSong(song)
+            }
+            onItemSelected()
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .clip(
+                RoundedCornerShape(
+                    topStart = 28.dp,
+                    topEnd = 28.dp
+                )
+            ),
+        contentPadding = PaddingValues(
+            top = 8.dp,
+            bottom = if (imePadding <= 8.dp) (MiniPlayerHeight + systemBarPaddingBottom) else imePadding
+        )
+    ) {
+        item {
+            SearchResultSectionHeader(title = "Recently Searched")
+        }
+
+        items(
+            count = recentlySearched.size,
+            key = { index ->
+                val item = recentlySearched[index]
+                when (item) {
+                    is SearchResultItem.SongItem -> "recent_song_${item.song.id}"
+                    is SearchResultItem.AlbumItem -> "recent_album_${item.album.id}"
+                    is SearchResultItem.ArtistItem -> "recent_artist_${item.artist.id}"
+                    is SearchResultItem.PlaylistItem -> "recent_playlist_${item.playlist.id}_${index}"
+                }
+            },
+            contentType = { index ->
+                when (recentlySearched[index]) {
+                    is SearchResultItem.SongItem -> "search_song"
+                    is SearchResultItem.AlbumItem -> "search_album"
+                    is SearchResultItem.ArtistItem -> "search_artist"
+                    is SearchResultItem.PlaylistItem -> "search_playlist"
+                }
+            }
+        ) { index ->
+            val item = recentlySearched[index]
+            Box(modifier = Modifier.padding(bottom = 12.dp)) {
+                when (item) {
+                    is SearchResultItem.SongItem -> {
+                        EnhancedSongListItem(
+                            song = item.song,
+                            isPlaying = isPlaying,
+                            isCurrentSong = currentPlayingSongId == item.song.id,
+                            onMoreOptionsClick = onSongMoreOptionsClick,
+                            onClick = { onSongResultClick(item.song) }
+                        )
+                    }
+                    is SearchResultItem.AlbumItem -> {
+                        val onPlayClick = remember(item.album, playerViewModel, onItemSelected) {
+                            {
+                                navController.navigateSafelyReplacing(
+                                    route = Screen.AlbumDetail.createRoute(item.album.id, autoPlay = true),
+                                    patternToPop = Screen.AlbumDetail.route
+                                )
+                                onItemSelected()
+                            }
+                        }
+                        val onOpenClick = remember(item.album, playerViewModel, onItemSelected) {
+                            {
+                                navController.navigateSafelyReplacing(
+                                    route = Screen.AlbumDetail.createRoute(item.album.id),
+                                    patternToPop = Screen.AlbumDetail.route
+                                )
+                                onItemSelected()
+                            }
+                        }
+                        SearchResultAlbumItem(
+                            album = item.album,
+                            onPlayClick = onPlayClick,
+                            onOpenClick = onOpenClick
+                        )
+                    }
+                    is SearchResultItem.ArtistItem -> {
+                        val onPlayClick = remember(item.artist, playerViewModel, onItemSelected) {
+                            {
+                                navController.navigateSafelyReplacing(
+                                    route = Screen.ArtistDetail.createRoute(item.artist.id, autoPlay = true),
+                                    patternToPop = Screen.ArtistDetail.route
+                                )
+                                onItemSelected()
+                            }
+                        }
+                        val onOpenClick = remember(item.artist, playerViewModel, onItemSelected) {
+                            {
+                                navController.navigateSafelyReplacing(
+                                    route = Screen.ArtistDetail.createRoute(item.artist.id),
+                                    patternToPop = Screen.ArtistDetail.route
+                                )
+                                onItemSelected()
+                            }
+                        }
+                        SearchResultArtistItem(
+                            artist = item.artist,
+                            onPlayClick = onPlayClick,
+                            onOpenClick = onOpenClick
+                        )
+                    }
+                    is SearchResultItem.PlaylistItem -> {
+                        val playlistSongs by remember(item.playlist.songIds, playerViewModel) {
+                            playerViewModel.observeSongs(item.playlist.songIds)
+                        }.collectAsStateWithLifecycle(initialValue = emptyList())
+                        val coroutineScope = rememberCoroutineScope()
+                        val onPlayClick: () -> Unit = {
+                            navController.navigateSafelyReplacing(
+                                route = Screen.PlaylistDetail.createRoute(item.playlist.id, autoPlay = true),
+                                patternToPop = Screen.PlaylistDetail.route
+                            )
+                            onItemSelected()
+                        }
+                        val onOpenClick = remember(item.playlist, playerViewModel, onItemSelected) {
+                            {
+                                navController.navigateSafelyReplacing(
+                                    route = Screen.PlaylistDetail.createRoute(item.playlist.id),
+                                    patternToPop = Screen.PlaylistDetail.route
+                                )
+                                onItemSelected()
+                            }
+                        }
+                        SearchResultPlaylistItem(
+                            playlist = item.playlist,
+                            playlistSongs = playlistSongs,
+                            onPlayClick = onPlayClick,
+                            onOpenClick = onOpenClick
+                        )
+                    }
+                }
+            }
+        }
+    }
 }

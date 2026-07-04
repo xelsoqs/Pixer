@@ -15,11 +15,35 @@ interface DeezerApiService {
      * @param limit Maximum number of results to return
      * @return Search response containing list of matching artists
      */
-    @GET("search/artist")
+    @GET("platform/generic/search/artist")
     suspend fun searchArtist(
         @Query("q") query: String,
-        @Query("limit") limit: Int = 1
-    ): DeezerSearchResponse
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerGenericSearchResponse
+
+    @GET("platform/generic/search/track")
+    suspend fun searchTrack(
+        @Query("q") query: String,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerGenericSearchResponse
+
+    @GET("platform/generic/search/playlist")
+    suspend fun searchPlaylist(
+        @Query("q") query: String,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerGenericSearchResponse
+
+    @GET("platform/generic/search/album")
+    suspend fun searchAlbum(
+        @Query("q") query: String,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerGenericSearchResponseObject
+
+    @GET("platform/generic/search/best-results")
+    suspend fun searchBestResult(
+        @Query("q") query: String,
+        @retrofit2.http.Header("authorization") auth: String
+    ): com.google.gson.JsonObject
 
     @GET("platform/generic/user/{user_id}/multiflow/default")
     suspend fun getMultiFlow(
@@ -81,6 +105,12 @@ interface DeezerApiService {
         @retrofit2.http.Url url: String,
         @retrofit2.http.Header("authorization") auth: String
     ): DeezerMultiFlowResponse
+
+    @GET("platform/gcast/user/{user_id}/search/recently-searched")
+    suspend fun getRecentlySearched(
+        @retrofit2.http.Path("user_id") userId: Long,
+        @retrofit2.http.Header("authorization") auth: String
+    ): DeezerGenericSearchResponseObject
 
     @GET("platform/generic/playlist/{playlist_id}")
     suspend fun getPlaylistTracks(

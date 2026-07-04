@@ -124,6 +124,7 @@ private fun formatArtistStats(fans: Int, albums: Int): String {
 @Composable
 fun ArtistDetailScreen(
     artistId: String,
+    autoPlay: Boolean = false,
     navController: NavController,
     playerViewModel: PlayerViewModel,
     viewModel: ArtistDetailViewModel = hiltViewModel(),
@@ -131,6 +132,22 @@ fun ArtistDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val stablePlayerState by playerViewModel.stablePlayerState.collectAsStateWithLifecycle()
+    val artist = uiState.artist
+    val songs = uiState.songs
+    val topTracks = uiState.topTracks
+
+    var hasAutoPlayed by remember { mutableStateOf(false) }
+    LaunchedEffect(songs, topTracks, autoPlay) {
+        if (autoPlay && !hasAutoPlayed && artist != null) {
+            if (songs.isNotEmpty()) {
+                hasAutoPlayed = true
+                playerViewModel.playSongsShuffled(songs, queueName = artist.name, startAtZero = true)
+            } else if (topTracks.isNotEmpty()) {
+                hasAutoPlayed = true
+                playerViewModel.playSongsShuffled(topTracks, queueName = artist.name, startAtZero = true)
+            }
+        }
+    }
     
     // Optimization: Defer heavy list rendering until navigation transition settles
     var isTransitionFinished by remember { mutableStateOf(false) }

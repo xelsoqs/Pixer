@@ -1,4 +1,3 @@
-
 bring output device and cast selection from the main app
 bring the get rid of the current device capabilities page and bring it over from the main app its better
 bring over missing settings from the main app(blur,show scroll bar, batt optimization, auto play on cast)
@@ -15,11 +14,12 @@ ask to enable animated lyrics and crossfade in setup
 more login info stuff in setup (2 ways to login)
 fix liked songs order
 recents tab in library
-add playback reporting back to deezer
 implement random
-search
+
 
 more user details in settings account page
 
 
 add a 2 peak corousel setting appearance
+
+add playback reporting back to deezer

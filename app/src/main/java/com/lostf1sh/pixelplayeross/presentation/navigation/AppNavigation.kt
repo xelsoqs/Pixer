@@ -337,18 +337,23 @@ fun AppNavigation(
             }
             composable(
                 route = Screen.PlaylistDetail.route,
-                arguments = listOf(navArgument("playlistId") { type = NavType.StringType }),
+                arguments = listOf(
+                    navArgument("playlistId") { type = NavType.StringType },
+                    navArgument("autoPlay") { type = NavType.BoolType; defaultValue = false }
+                ),
                 enterTransition = { enterTransition() },
                 exitTransition = { exitTransition() },
                 popEnterTransition = { popEnterTransition() },
                 popExitTransition = { popExitTransition() },
             ) { backStackEntry ->
                 val playlistId = backStackEntry.arguments?.getString("playlistId")
+                val autoPlay = backStackEntry.arguments?.getBoolean("autoPlay") ?: false
                 val playlistViewModel: PlaylistViewModel = hiltViewModel()
                 if (playlistId != null) {
                     ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
                         PlaylistDetailScreen(
                             playlistId = playlistId,
+                            autoPlay = autoPlay,
                             playerViewModel = playerViewModel,
                             playlistViewModel = playlistViewModel,
                             onBackClick = { navController.popBackStack() },
@@ -413,17 +418,22 @@ fun AppNavigation(
             }
             composable(
                 route = Screen.AlbumDetail.route,
-                arguments = listOf(navArgument("albumId") { type = NavType.StringType }),
+                arguments = listOf(
+                    navArgument("albumId") { type = NavType.StringType },
+                    navArgument("autoPlay") { type = NavType.BoolType; defaultValue = false }
+                ),
                 enterTransition = { enterTransition() },
                 exitTransition = { exitTransition() },
                 popEnterTransition = { popEnterTransition() },
                 popExitTransition = { popExitTransition() },
             ) { backStackEntry ->
                 val albumId = backStackEntry.arguments?.getString("albumId")
+                val autoPlay = backStackEntry.arguments?.getBoolean("autoPlay") ?: false
                 if (albumId != null) {
                     ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
                         AlbumDetailScreen(
                             albumId = albumId,
+                            autoPlay = autoPlay,
                             navController = navController,
                             playerViewModel = playerViewModel
                         )
@@ -432,17 +442,22 @@ fun AppNavigation(
             }
             composable(
                 route = Screen.ArtistDetail.route,
-                arguments = listOf(navArgument("artistId") { type = NavType.StringType }),
+                arguments = listOf(
+                    navArgument("artistId") { type = NavType.StringType },
+                    navArgument("autoPlay") { type = NavType.BoolType; defaultValue = false }
+                ),
                 enterTransition = { enterTransition() },
                 exitTransition = { exitTransition() },
                 popEnterTransition = { popEnterTransition() },
                 popExitTransition = { popExitTransition() },
             ) { backStackEntry ->
                 val artistId = backStackEntry.arguments?.getString("artistId")
+                val autoPlay = backStackEntry.arguments?.getBoolean("autoPlay") ?: false
                 if (artistId != null) {
                     ScreenWrapper(navController = navController, playerViewModel = playerViewModel) {
                         ArtistDetailScreen(
                             artistId = artistId,
+                            autoPlay = autoPlay,
                             navController = navController,
                             playerViewModel = playerViewModel
                         )

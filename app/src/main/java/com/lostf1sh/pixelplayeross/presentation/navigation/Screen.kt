@@ -16,8 +16,8 @@ sealed class Screen(val route: String) {
     object PaletteStyle : Screen("palette_style_settings")
     object Experimental : Screen("experimental_settings")
     object NavBarCrRad : Screen("nav_bar_corner_radius")
-    object PlaylistDetail : Screen("playlist_detail/{playlistId}") {
-        fun createRoute(playlistId: String) = "playlist_detail/$playlistId"
+    object PlaylistDetail : Screen("playlist_detail/{playlistId}?autoPlay={autoPlay}") {
+        fun createRoute(playlistId: String, autoPlay: Boolean = false) = "playlist_detail/$playlistId?autoPlay=$autoPlay"
     }
     
     object SmartTrackList : Screen("smart_track_list/{listType}") {
@@ -33,13 +33,13 @@ sealed class Screen(val route: String) {
     }
     object DJSpace : Screen("dj_space")
     // The base route is "album_detail". The full route with the argument is defined in AppNavigation.
-    object AlbumDetail : Screen("album_detail/{albumId}") {
+    object AlbumDetail : Screen("album_detail/{albumId}?autoPlay={autoPlay}") {
         // Helper function to build the navigation route with the album ID.
-        fun createRoute(albumId: Long) = "album_detail/$albumId"
+        fun createRoute(albumId: Any, autoPlay: Boolean = false) = "album_detail/$albumId?autoPlay=$autoPlay"
     }
 
-    object ArtistDetail : Screen("artist_detail/{artistId}") {
-        fun createRoute(artistId: Long) = "artist_detail/$artistId"
+    object ArtistDetail : Screen("artist_detail/{artistId}?autoPlay={autoPlay}") {
+        fun createRoute(artistId: Any, autoPlay: Boolean = false) = "artist_detail/$artistId?autoPlay=$autoPlay"
     }
 
     object EditTransition : Screen("edit_transition?playlistId={playlistId}") {

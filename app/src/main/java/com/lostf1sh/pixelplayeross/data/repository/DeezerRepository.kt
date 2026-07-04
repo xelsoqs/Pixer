@@ -7,6 +7,8 @@ import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerPlaylistDetailRespo
 import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerRecommendedPlaylistsResponse
 import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerStreamUrlsResponse
 import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerTrackInfoResponse
+import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerGenericSearchResponse
+import com.lostf1sh.pixelplayeross.data.network.deezer.DeezerGenericSearchResponseObject
 import com.lostf1sh.pixelplayeross.data.preferences.UserPreferencesRepository
 import kotlinx.coroutines.flow.firstOrNull
 import javax.inject.Inject
@@ -47,6 +49,17 @@ class DeezerRepository @Inject constructor(
         return try {
             val res = deezerApiService.getMultiFlowTracks(url, auth)
             res
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun getRecentlySearched(): com.lostf1sh.pixelplayeross.data.network.deezer.DeezerGenericSearchResponseObject? {
+        val auth = getAuthHeader() ?: return null
+        val userId = getUserId() ?: return null
+        return try {
+            deezerApiService.getRecentlySearched(userId, auth)
         } catch (e: Exception) {
             e.printStackTrace()
             null
@@ -110,6 +123,56 @@ class DeezerRepository @Inject constructor(
         val auth = getAuthHeader() ?: return null
         return try {
             deezerApiService.getDiscoveryMix(auth)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun searchArtist(query: String): DeezerGenericSearchResponse? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            deezerApiService.searchArtist(query, auth)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun searchTrack(query: String): DeezerGenericSearchResponse? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            deezerApiService.searchTrack(query, auth)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun searchPlaylist(query: String): DeezerGenericSearchResponse? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            deezerApiService.searchPlaylist(query, auth)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun searchAlbum(query: String): DeezerGenericSearchResponseObject? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            deezerApiService.searchAlbum(query, auth)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+    }
+
+    suspend fun searchBestResult(query: String): com.google.gson.JsonObject? {
+        val auth = getAuthHeader() ?: return null
+        return try {
+            deezerApiService.searchBestResult(query, auth)
         } catch (e: Exception) {
             e.printStackTrace()
             null

@@ -1220,6 +1220,7 @@ class PlayerViewModel @Inject constructor(
 
     fun updateSearchQuery(query: String) {
         searchQuery = query
+        searchStateHolder.updateSearchQuery(query)
     }
 
     private var mediaController: MediaController? = null
@@ -1902,17 +1903,28 @@ class PlayerViewModel @Inject constructor(
                 searchStateHolder.searchResults,
                 searchStateHolder.selectedSearchFilter,
                 searchStateHolder.searchHistory,
-            ) { results, filter, history ->
-                Triple(results, filter, history)
-            }.collect { (results, filter, history) ->
+                searchStateHolder.bestSearchResults,
+                searchStateHolder.recentlySearched
+            ) { results, filter, history, bestResults, recentlySearched ->
+                object {
+                    val results = results
+                    val filter = filter
+                    val history = history
+                    val bestResults = bestResults
+                    val recentlySearched = recentlySearched
+                }
+            }.combine(searchStateHolder.isSearching) { state1, isSearching ->
                 _playerUiState.update {
                     it.copy(
-                        searchResults = results,
-                        selectedSearchFilter = filter,
-                        searchHistory = history,
+                        searchResults = state1.results,
+                        selectedSearchFilter = state1.filter,
+                        searchHistory = state1.history,
+                        bestSearchResults = state1.bestResults,
+                        recentlySearched = state1.recentlySearched,
+                        isSearching = isSearching
                     )
                 }
-            }
+            }.collect { }
         }
 
         // Initialize LibraryStateHolder

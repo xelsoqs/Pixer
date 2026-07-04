@@ -160,6 +160,7 @@ fun formatLikes(likes: Int): String {
 @Composable
 fun PlaylistDetailScreen(
     playlistId: String,
+    autoPlay: Boolean = false,
     onBackClick: () -> Unit,
     onDeletePlayListClick: () -> Unit,
     playerViewModel: PlayerViewModel,
@@ -234,6 +235,22 @@ fun PlaylistDetailScreen(
     val bottomBarHeightDp = resolveNavBarOccupiedHeight(systemNavBarInset, navBarCompactMode)
     var showPlaylistBottomSheet by remember { mutableStateOf(false) }
     var localReorderableSongs by remember(songsInPlaylist) { mutableStateOf(songsInPlaylist) }
+
+    var hasAutoPlayed by remember { mutableStateOf(false) }
+    LaunchedEffect(localReorderableSongs, autoPlay) {
+        if (autoPlay && !hasAutoPlayed && currentPlaylist != null && localReorderableSongs.isNotEmpty()) {
+            hasAutoPlayed = true
+            playerViewModel.playSongs(
+                localReorderableSongs,
+                localReorderableSongs.first(),
+                currentPlaylist.name
+            )
+            if (playerStableState.isShuffleEnabled) playerViewModel.toggleShuffle()
+            if (currentPlaylist.source == "DEEZER") {
+                playlistViewModel.appendRemainingTracksToPlayer(playerViewModel, shuffle = playerStableState.isShuffleEnabled)
+            }
+        }
+    }
 
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()

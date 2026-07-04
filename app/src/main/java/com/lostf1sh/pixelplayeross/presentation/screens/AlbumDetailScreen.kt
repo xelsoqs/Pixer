@@ -115,12 +115,24 @@ private const val UseSharedCollapsibleTopBarProbe = true
 @Composable
 fun AlbumDetailScreen(
     albumId: String,
+    autoPlay: Boolean = false,
     navController: NavController,
     playerViewModel: PlayerViewModel,
     viewModel: AlbumDetailViewModel = hiltViewModel(),
     playlistViewModel: PlaylistViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val album = uiState.album
+    val songs = uiState.songs
+
+    var hasAutoPlayed by remember { mutableStateOf(false) }
+    LaunchedEffect(songs, autoPlay) {
+        if (autoPlay && !hasAutoPlayed && songs.isNotEmpty() && album != null) {
+            hasAutoPlayed = true
+            playerViewModel.playSongsShuffled(songs, queueName = album.title, startAtZero = true)
+        }
+    }
+
     // Only the "is a song loaded" transition matters at screen level — per-song playback
     // highlighting is isolated inside LibraryPlaybackAwareSongItem so the song list does
     // not recompose wholesale on every playback-state change.
