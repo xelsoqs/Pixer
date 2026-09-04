@@ -92,7 +92,10 @@ class PlaylistSelectionStateHolder @Inject constructor() {
      * Clears all selected playlists, exiting selection mode.
      */
     fun clearSelection() {
-        updateState(emptyList(), emptySet())
+    _selectedPlaylists.value = emptyList()
+    _selectedPlaylistIds.value = emptySet()
+    _selectedCount.value = 0
+    _isSelectionMode.value = false
     }
 
     /**

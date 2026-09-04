@@ -206,3 +206,9 @@
     public static int d(...);
     public static int i(...);
 }
+
+# =============================================================================
+# VIEWMODELS & STATE HOLDERS
+# =============================================================================
+-keep class com.lostf1sh.pixelplayeross.presentation.viewmodel.** { *; }
+-keepclassmembers class com.lostf1sh.pixelplayeross.presentation.viewmodel.** { *; }

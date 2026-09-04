@@ -540,17 +540,19 @@ fun LibraryScreen(
     }
 
     LaunchedEffect(currentTabIndex) {
-        Trace.beginSection("LibraryScreen.PageChangeTabLoad")
-        playerViewModel.onLibraryTabSelected(currentTabIndex)
-        Trace.endSection()
+    Trace.beginSection("LibraryScreen.PageChangeTabLoad")
+    playerViewModel.onLibraryTabSelected(currentTabIndex)
+    Trace.endSection()
 
-        // Clear selection when switching tabs
-        multiSelectionState.clearSelection()
-        playlistMultiSelectionState.clearSelection()
-        selectedAlbums = emptyList()
-        showMultiSelectionSheet = false
-        showPlaylistMultiSelectionSheet = false
-        showAlbumMultiSelectionSheet = false
+    // Clear selection when switching tabs
+    runCatching {
+        multiSelectionState?.clearSelection()
+        playlistMultiSelectionState?.clearSelection()
+    }
+    selectedAlbums = emptyList()
+    showMultiSelectionSheet = false
+    showPlaylistMultiSelectionSheet = false
+    showAlbumMultiSelectionSheet = false
     }
 
     val fabState by remember { derivedStateOf { currentTabIndex } } // UI unchanged
